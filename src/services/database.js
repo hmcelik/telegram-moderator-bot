@@ -5,9 +5,6 @@ import logger from './logger.js';
 
 let db;
 
-/**
- * Initializes the database connection and creates tables if they don't exist.
- */
 export const initDb = async () => {
     db = await open({
         filename: config.database.path,
@@ -29,18 +26,30 @@ export const initDb = async () => {
             key TEXT PRIMARY KEY,
             value TEXT NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS keyword_whitelist (
+            keyword TEXT PRIMARY KEY COLLATE NOCASE
+        );
     `);
     logger.info('Database initialized successfully.');
 };
 
+// --- Keyword Whitelist Logic ---
+
+export const addWhitelistKeyword = (keyword) => {
+    return db.run('INSERT OR IGNORE INTO keyword_whitelist (keyword) VALUES (?)', keyword);
+};
+
+export const removeWhitelistKeyword = (keyword) => {
+    return db.run('DELETE FROM keyword_whitelist WHERE keyword = ?', keyword);
+};
+
+export const getWhitelistKeywords = async () => {
+    const rows = await db.all('SELECT keyword FROM keyword_whitelist');
+    return rows.map(row => row.keyword);
+};
+
 // --- Strike and Audit Logic ---
 
-/**
- * Increments a user's strike count and records the event in the audit log.
- * @param {string} userId - The user's Telegram ID.
- * @param {object} logData - Data about the deleted message.
- * @returns {Promise<number>} The new strike count for the user.
- */
 export const recordStrike = async (userId, logData) => {
     await db.run('BEGIN TRANSACTION');
     try {
@@ -73,40 +82,24 @@ export const resetStrikes = (userId) => {
     return db.run('UPDATE strikes SET count = 0 WHERE userId = ?', userId);
 };
 
-export const getAuditLogs = (limit = 50) => {
-    return db.all('SELECT * FROM audit_log ORDER BY timestamp DESC LIMIT ?', limit);
-};
-
 export const getTotalDeletionsToday = async () => {
     const today = new Date().toISOString().split('T')[0];
     const result = await db.get(`SELECT COUNT(*) as count FROM audit_log WHERE date(timestamp) = ?`, today);
-    return result.count;
+    return result?.count || 0;
 };
 
 // --- Settings Logic ---
 
-/**
- * Retrieves a setting from the database.
- * @param {string} key - The setting's key.
- * @param {*} defaultValue - The value to return if the key is not found.
- * @returns {Promise<*>} The stored value or the default value.
- */
 export const getSetting = async (key, defaultValue) => {
     const row = await db.get('SELECT value FROM settings WHERE key = ?', key);
     if (!row) return defaultValue;
     try {
-        // Settings are stored as JSON strings
         return JSON.parse(row.value);
     } catch {
         return row.value; // Fallback for non-JSON values
     }
 };
 
-/**
- * Persists a setting to the database.
- * @param {string} key - The setting's key.
- * @param {*} value - The value to store (will be stringified).
- */
 export const setSetting = (key, value) => {
     return db.run('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)', key, JSON.stringify(value));
 };

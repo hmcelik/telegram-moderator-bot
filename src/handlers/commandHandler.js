@@ -9,13 +9,7 @@ const ADMIN_USER_ID = process.env.ADMIN_USER_ID;
 export const handleCommand = async (msg) => {
     const { from, chat, text } = msg;
 
-    // Ensure commands are only processed from the designated admin in a private chat
     if (from.id.toString() !== ADMIN_USER_ID || chat.type !== 'private') {
-        if (chat.type !== 'private') {
-             logger.warn(`Command attempt in non-private chat by user ${from.id}`);
-        } else {
-             logger.warn(`Unauthorized command attempt from user ${from.id}`);
-        }
         return;
     }
 
@@ -25,37 +19,31 @@ export const handleCommand = async (msg) => {
     switch (command) {
         case '/help':
             response = `**🤖 Admin Command Center**
-
-Here are the commands to configure the bot.
+Admins are whitelisted automatically.
 
 **Penalty Settings:**
 - \`/set_penalty <kick|ban>\`
-  Sets the final action on the last strike.
 - \`/set_strikes <number>\`
-  Sets how many strikes trigger the final penalty (e.g., 3).
 - \`/set_mute_duration <minutes>\`
-  Sets how long a user is muted on their 2nd strike.
 - \`/set_warning_message <message>\`
-  Sets the warning text for the 1st strike. Use \`{user}\` to mention the user.
+
+**Whitelist Management:**
+- \`/add_mod <userId>\` (For non-admins)
+- \`/add_keyword <keyword>\` (e.g., dogetoken)
+- \`/remove_keyword <keyword>\`
+- \`/list_keywords\`
 
 **Core Settings:**
 - \`/status\`
-  View current stats and all settings.
-- \`/set_threshold <0.1-1.0>\`
-  Set spam confidence score (e.g., 0.85). Higher is stricter.
-
-**Moderator Management:**
-- \`/add_mod <userId>\`
-- \`/remove_mod <userId>\`
-- \`/list_mods\``;
+- \`/set_threshold <0.1-1.0>\``;
             break;
 
         case '/status':
             const deletionsToday = await db.getTotalDeletionsToday();
             response = `**📊 Bot Status & Configuration**
 
-**Stats:**
-- Deletions Today: \`${deletionsToday}\`
+**Info:**
+- Group admins are automatically whitelisted.
 
 **Penalty System:**
 - Final Penalty: \`${config.penaltyMode}\`
@@ -66,8 +54,42 @@ Here are the commands to configure the bot.
 - Spam Threshold: \`${config.spamThreshold}\`
 - 1st Strike Warning: \`"${config.warningMessage}"\`
 
-**Moderators:**
-- Ignored IDs: \`${config.moderatorIds.join(', ') || 'None'}\``;
+**Manual Whitelist (Non-Admins):**
+- Manually Added IDs: \`${config.moderatorIds.join(', ') || 'None'}\`
+
+**Keyword Whitelist:**
+- Keywords: \`${config.whitelistedKeywords.join(', ') || 'None'}\``;
+            break;
+
+        case '/add_keyword':
+            const keywordToAdd = args[0]?.toLowerCase();
+            if (keywordToAdd) {
+                await db.addWhitelistKeyword(keywordToAdd);
+                config.whitelistedKeywords.push(keywordToAdd); // Update live config
+                response = `✅ Keyword "${keywordToAdd}" added to the whitelist.`;
+            } else {
+                response = '❌ Please provide a keyword to add.';
+            }
+            break;
+
+        case '/remove_keyword':
+            const keywordToRemove = args[0]?.toLowerCase();
+            if (keywordToRemove) {
+                const index = config.whitelistedKeywords.indexOf(keywordToRemove);
+                if (index > -1) {
+                    await db.removeWhitelistKeyword(keywordToRemove);
+                    config.whitelistedKeywords.splice(index, 1); // Update live config
+                    response = `✅ Keyword "${keywordToRemove}" removed from the whitelist.`;
+                } else {
+                    response = `❌ Keyword "${keywordToRemove}" not found in whitelist.`;
+                }
+            } else {
+                response = '❌ Please provide a keyword to remove.';
+            }
+            break;
+
+        case '/list_keywords':
+            response = `**Whitelisted Keywords:**\n- ${config.whitelistedKeywords.join('\n- ') || 'None'}`;
             break;
 
         case '/set_threshold':
@@ -79,7 +101,7 @@ Here are the commands to configure the bot.
                 response = '❌ Invalid threshold. Must be a number between 0.1 and 1.0.';
             }
             break;
-            
+
         case '/set_penalty':
             const mode = args[0]?.toLowerCase();
             if (Object.values(PenaltyMode).includes(mode)) {
@@ -125,28 +147,31 @@ Here are the commands to configure the bot.
             if (modIdToAdd && !config.moderatorIds.includes(modIdToAdd)) {
                 const newMods = [...config.moderatorIds, modIdToAdd];
                 await updateSetting('moderatorIds', newMods);
-                response = `✅ Moderator ${modIdToAdd} added.`;
+                response = `✅ Manually whitelisted user ${modIdToAdd}.`;
             } else {
-                response = '❌ Invalid or duplicate moderator ID.';
+                response = '❌ Invalid or duplicate user ID.';
             }
             break;
 
         case '/remove_mod':
-             const modIdToRemove = args[0];
+            const modIdToRemove = args[0];
             if (modIdToRemove && config.moderatorIds.includes(modIdToRemove)) {
                 const newMods = config.moderatorIds.filter(id => id !== modIdToRemove);
                 await updateSetting('moderatorIds', newMods);
-                response = `✅ Moderator ${modIdToRemove} removed.`;
+                response = `✅ Removed user ${modIdToRemove} from manual whitelist.`;
             } else {
-                response = '❌ Moderator ID not found.';
+                response = '❌ User ID not found in manual whitelist.';
             }
             break;
 
         case '/list_mods':
-            response = `**Current Moderator IDs:**\n${config.moderatorIds.join('\n') || 'None'}`;
+            response = `**Manually Whitelisted Users (Non-Admins):**\n${config.moderatorIds.join('\n') || 'None'}`;
+            break;
+
+        default:
+            response = 'Unknown command. Use /help to see all available commands.';
             break;
     }
 
-    // Send the response using Markdown for better formatting
     await sendMessage(chat.id, response, { parse_mode: 'Markdown' });
 };
