@@ -2,6 +2,7 @@ import bot from './services/telegram.js';
 import { initDb } from './services/database.js';
 import { handleMessage } from './handlers/messageHandler.js';
 import { handleCommand } from './handlers/commandHandler.js';
+import { handleCallback } from './handlers/callbackHandler.js';
 import config, { loadSettingsFromDb } from './config/index.js';
 import logger from './services/logger.js';
 
@@ -10,7 +11,7 @@ const main = async () => {
 
     // 1. Initialize and connect to the database
     await initDb();
-    
+
     // 2. Load persistent settings from the database into the config
     await loadSettingsFromDb();
     logger.info('Configuration loaded from database.');
@@ -24,6 +25,9 @@ const main = async () => {
             handleMessage(msg);
         }
     });
+
+    // 4. Register callback query listener for inline keyboard interactions
+    bot.on('callback_query', handleCallback);
 
     bot.on('polling_error', (error) => {
         logger.error(`Polling error: ${error.code} - ${error.message}`);

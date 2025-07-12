@@ -38,7 +38,7 @@ export const deleteMessage = async (chatId, messageId) => {
 export const kickUser = async (chatId, userId) => {
   try {
     await bot.banChatMember(chatId, userId);
-    await delay(1000); 
+    await delay(1000);
     await bot.unbanChatMember(chatId, userId, { only_if_banned: true });
     return true;
   } catch (error) {
@@ -61,6 +61,14 @@ export const muteUser = (chatId, userId, durationMinutes) => {
 
 export const sendMessage = (chatId, text, options) => {
     return bot.sendMessage(chatId, text, options);
+};
+
+export const editMessageText = (text, options) => {
+    return bot.editMessageText(text, options);
+};
+
+export const answerCallbackQuery = (callbackQueryId, options) => {
+    return bot.answerCallbackQuery(callbackQueryId, options);
 };
 
 export default bot;

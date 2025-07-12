@@ -7,6 +7,12 @@ import logger from '../services/logger.js';
 export const handleMessage = async (msg) => {
     const { chat, from, text, message_id } = msg;
 
+    // --- FIX ---
+    // Ignore all messages in private chats. This handler is only for group moderation.
+    if (chat.type === 'private') {
+        return;
+    }
+
     const adminIds = await getChatAdmins(chat.id);
     const whitelist = [...adminIds.map(id => id.toString()), ...config.moderatorIds];
     
@@ -22,7 +28,7 @@ export const handleMessage = async (msg) => {
     try {
         const classification = await isPromotional(text, config.whitelistedKeywords);
         const finalScore = classification.score;
-        logger.info(`Message from ${from.id} classified with final score: ${finalScore.toFixed(2)}`);
+        logger.info(`Message from ${from.id} in chat ${chat.id} classified with final score: ${finalScore.toFixed(2)}`);
 
         if (finalScore >= config.spamThreshold) {
             await deleteMessage(chat.id, message_id);
@@ -35,7 +41,6 @@ export const handleMessage = async (msg) => {
 
             logger.info(`User ${from.id} committed strike #${newStrikeCount}.`);
 
-            // --- New Dynamic Penalty Engine ---
             await applyPenalty(chat.id, from, newStrikeCount);
         }
     } catch (error) {
@@ -58,7 +63,6 @@ async function applyPenalty(chatId, user, strikeCount) {
         }},
     ];
 
-    // Find all actions that are triggered at the current strike count
     const triggeredActions = actions.filter(action => action.level > 0 && strikeCount >= action.level);
 
     if (triggeredActions.length === 0) {
@@ -66,14 +70,11 @@ async function applyPenalty(chatId, user, strikeCount) {
         return;
     }
 
-    // From the triggered actions, find the one with the highest level
     const actionToExecute = triggeredActions.reduce((prev, current) => (prev.level > current.level) ? prev : current);
 
-    // Execute the chosen action
     logger.warn(`Executing penalty: ${actionToExecute.name} for user ${user.id} at strike #${strikeCount}.`);
     await actionToExecute.execute();
 
-    // Reset strikes only if the action was a final one (kick or ban)
     if (actionToExecute.name === 'KICK' || actionToExecute.name === 'BAN') {
         await resetStrikes(user.id.toString());
         logger.info(`Strikes reset for user ${user.id}.`);
