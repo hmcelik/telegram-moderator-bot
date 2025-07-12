@@ -21,54 +21,59 @@ export const handleCommand = async (msg) => {
             response = `**🤖 Admin Command Center**
 Admins are whitelisted automatically.
 
-**Penalty Settings:**
-- \`/set_penalty <kick|ban>\`
-- \`/set_strikes <number>\`
-- \`/set_mute_duration <minutes>\`
-- \`/set_warning_message <message>\`
-
-**Whitelist Management:**
-- \`/add_mod <userId>\` (For non-admins)
-- \`/add_keyword <keyword>\` (e.g., dogetoken)
+**AI & Whitelist:**
+- \`/set_threshold <0.1-1.0>\`
+- \`/toggle_bypass\` (Toggle keyword whitelist bypass. Default: ON)
+- \`/add_keyword <keyword>\`
 - \`/remove_keyword <keyword>\`
 - \`/list_keywords\`
 
-**Core Settings:**
+**Penalty System:**
+- \`/set_penalty <kick|ban>\`
+- \`/set_strikes <number>\`
+- \`/set_mute_duration <minutes>\`
+
+**Other:**
 - \`/status\`
-- \`/set_threshold <0.1-1.0>\``;
+- \`/add_mod <userId>\` (For non-admins)`;
             break;
 
         case '/status':
             const deletionsToday = await db.getTotalDeletionsToday();
             response = `**📊 Bot Status & Configuration**
-
-**Info:**
-- Group admins are automatically whitelisted.
+**AI & Content:**
+- Spam Threshold: \`${config.spamThreshold}\`
+- Keyword Bypass Mode: \`${config.keywordWhitelistBypass ? 'ON' : 'OFF'}\` (If ON, AI is skipped for whitelisted words)
 
 **Penalty System:**
 - Final Penalty: \`${config.penaltyMode}\`
 - Strikes to Penalty: \`${config.penaltyLevel}\`
-- Mute Duration (2nd strike): \`${config.muteDurationMinutes} minutes\`
+- Mute Duration: \`${config.muteDurationMinutes} minutes\`
 
-**AI & Content:**
-- Spam Threshold: \`${config.spamThreshold}\`
-- 1st Strike Warning: \`"${config.warningMessage}"\`
+**Whitelists:**
+- Keywords: \`${config.whitelistedKeywords.join(', ') || 'None'}\`
+- Manual User Whitelist: \`${config.moderatorIds.join(', ') || 'None'}\``;
+            break;
 
-**Manual Whitelist (Non-Admins):**
-- Manually Added IDs: \`${config.moderatorIds.join(', ') || 'None'}\`
-
-**Keyword Whitelist:**
-- Keywords: \`${config.whitelistedKeywords.join(', ') || 'None'}\``;
+        case '/toggle_bypass':
+            const newValue = !config.keywordWhitelistBypass;
+            await updateSetting('keywordWhitelistBypass', newValue);
+            response = `✅ Keyword Bypass mode is now **${newValue ? 'ON' : 'OFF'}**.`;
+            if(newValue) {
+                response += `\nMessages with whitelisted words will be completely ignored.`
+            } else {
+                response += `\nWhitelisted words will be sent to the AI for context.`
+            }
             break;
 
         case '/add_keyword':
             const keywordToAdd = args[0]?.toLowerCase();
             if (keywordToAdd) {
                 await db.addWhitelistKeyword(keywordToAdd);
-                config.whitelistedKeywords.push(keywordToAdd); // Update live config
-                response = `✅ Keyword "${keywordToAdd}" added to the whitelist.`;
+                config.whitelistedKeywords.push(keywordToAdd);
+                response = `✅ Keyword "${keywordToAdd}" added.`;
             } else {
-                response = '❌ Please provide a keyword to add.';
+                response = '❌ Please provide a keyword.';
             }
             break;
 
@@ -78,13 +83,13 @@ Admins are whitelisted automatically.
                 const index = config.whitelistedKeywords.indexOf(keywordToRemove);
                 if (index > -1) {
                     await db.removeWhitelistKeyword(keywordToRemove);
-                    config.whitelistedKeywords.splice(index, 1); // Update live config
-                    response = `✅ Keyword "${keywordToRemove}" removed from the whitelist.`;
+                    config.whitelistedKeywords.splice(index, 1);
+                    response = `✅ Keyword "${keywordToRemove}" removed.`;
                 } else {
-                    response = `❌ Keyword "${keywordToRemove}" not found in whitelist.`;
+                    response = `❌ Keyword not found.`;
                 }
             } else {
-                response = '❌ Please provide a keyword to remove.';
+                response = '❌ Please provide a keyword.';
             }
             break;
 
@@ -98,7 +103,7 @@ Admins are whitelisted automatically.
                 await updateSetting('spamThreshold', threshold);
                 response = `✅ Spam threshold updated to ${threshold}.`;
             } else {
-                response = '❌ Invalid threshold. Must be a number between 0.1 and 1.0.';
+                response = '❌ Invalid threshold.';
             }
             break;
 
@@ -108,7 +113,7 @@ Admins are whitelisted automatically.
                 await updateSetting('penaltyMode', mode);
                 response = `✅ Penalty mode set to ${mode}.`;
             } else {
-                response = `❌ Invalid mode. Use "${PenaltyMode.KICK}" or "${PenaltyMode.BAN}".`;
+                response = '❌ Invalid mode.';
             }
             break;
 
@@ -116,9 +121,9 @@ Admins are whitelisted automatically.
             const level = parseInt(args[0], 10);
             if (!isNaN(level) && level > 1) {
                 await updateSetting('penaltyLevel', level);
-                response = `✅ Final penalty will now be applied on strike number ${level}.`;
+                response = `✅ Final penalty on strike #${level}.`;
             } else {
-                response = '❌ Invalid number. Must be an integer greater than 1.';
+                response = '❌ Strike level must be > 1.';
             }
             break;
 
@@ -126,9 +131,9 @@ Admins are whitelisted automatically.
             const duration = parseInt(args[0], 10);
             if (!isNaN(duration) && duration > 0) {
                 await updateSetting('muteDurationMinutes', duration);
-                response = `✅ Mute duration for 2nd strike set to ${duration} minutes.`;
+                response = `✅ Mute duration set to ${duration} minutes.`;
             } else {
-                response = '❌ Invalid duration. Must be a positive number of minutes.';
+                response = '❌ Invalid duration.';
             }
             break;
 
@@ -136,36 +141,36 @@ Admins are whitelisted automatically.
             const message = args.join(' ');
             if (message) {
                 await updateSetting('warningMessage', message);
-                response = `✅ Warning message updated to: "${message}"`;
+                response = `✅ Warning message updated.`;
             } else {
-                response = '❌ Please provide a message after the command.';
+                response = '❌ Please provide a message.';
             }
             break;
 
         case '/add_mod':
             const modIdToAdd = args[0];
-            if (modIdToAdd && !config.moderatorIds.includes(modIdToAdd)) {
+            if (modIdToAdd) {
                 const newMods = [...config.moderatorIds, modIdToAdd];
                 await updateSetting('moderatorIds', newMods);
                 response = `✅ Manually whitelisted user ${modIdToAdd}.`;
             } else {
-                response = '❌ Invalid or duplicate user ID.';
+                response = '❌ Please provide a user ID.';
             }
             break;
 
         case '/remove_mod':
-            const modIdToRemove = args[0];
-            if (modIdToRemove && config.moderatorIds.includes(modIdToRemove)) {
+             const modIdToRemove = args[0];
+            if (modIdToRemove) {
                 const newMods = config.moderatorIds.filter(id => id !== modIdToRemove);
                 await updateSetting('moderatorIds', newMods);
-                response = `✅ Removed user ${modIdToRemove} from manual whitelist.`;
+                response = `✅ Removed user ${modIdToRemove}.`;
             } else {
-                response = '❌ User ID not found in manual whitelist.';
+                response = '❌ Please provide a user ID.';
             }
             break;
 
         case '/list_mods':
-            response = `**Manually Whitelisted Users (Non-Admins):**\n${config.moderatorIds.join('\n') || 'None'}`;
+            response = `**Manually Whitelisted Users:**\n${config.moderatorIds.join('\n') || 'None'}`;
             break;
 
         default:

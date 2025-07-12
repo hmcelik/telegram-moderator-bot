@@ -15,26 +15,31 @@ export const handleMessage = async (msg) => {
         return;
     }
 
-    // Keyword Whitelist Check
-    const lowerCaseText = text.toLowerCase();
-    for (const keyword of config.whitelistedKeywords) {
-        if (lowerCaseText.includes(keyword.toLowerCase())) {
-            logger.info(`Ignoring message from ${from.id} due to whitelisted keyword: "${keyword}"`);
-            return;
+    // Keyword Whitelist Bypass Check
+    if (config.keywordWhitelistBypass) {
+        const lowerCaseText = text.toLowerCase();
+        for (const keyword of config.whitelistedKeywords) {
+            if (lowerCaseText.includes(keyword.toLowerCase())) {
+                logger.info(`Ignoring message from ${from.id} due to whitelisted keyword bypass: "${keyword}"`);
+                return;
+            }
         }
     }
 
     try {
-        const classification = await isPromotional(text);
-        logger.info(`Message from ${from.id} in chat ${chat.id} classified with score: ${classification.score}`);
+        // Pass keywords to the NLP service (this is used when bypass mode is OFF)
+        const classification = await isPromotional(text, config.whitelistedKeywords);
+        const finalScore = classification.score;
 
-        if (classification.score >= config.spamThreshold) {
+        logger.info(`Message from ${from.id} classified with final score: ${finalScore.toFixed(2)}`);
+
+        if (finalScore >= config.spamThreshold) {
             await deleteMessage(chat.id, message_id);
             const newStrikeCount = await recordStrike(from.id.toString(), {
                 timestamp: new Date().toISOString(),
                 user: from,
                 messageExcerpt: text.substring(0, 100),
-                classificationScore: classification.score,
+                classificationScore: finalScore,
             });
 
             logger.info(`User ${from.id} committed strike #${newStrikeCount}.`);

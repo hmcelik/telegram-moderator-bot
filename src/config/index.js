@@ -14,14 +14,15 @@ const config = {
     database: {
         path: process.env.DATABASE_PATH || './moderator.db',
     },
-    // Runtime-configurable settings with defaults
+    // Runtime-configurable settings
     spamThreshold: 0.85,
     penaltyMode: PenaltyMode.KICK,
     penaltyLevel: 3,
     muteDurationMinutes: 60,
-    warningMessage: "Please avoid posting promotional content. Further violations will result in a mute or ban.",
+    warningMessage: "Please avoid posting promotional content.",
     moderatorIds: [], // Manual whitelist for non-admins
-    whitelistedKeywords: [], // Keyword whitelist
+    whitelistedKeywords: [],
+    keywordWhitelistBypass: true, // If true, AI check is skipped when a keyword is found
 };
 
 // Function to load all settings from the database on startup
@@ -33,9 +34,10 @@ export const loadSettingsFromDb = async () => {
     config.warningMessage = await getSetting('warningMessage', config.warningMessage);
     config.moderatorIds = await getSetting('moderatorIds', []);
     config.whitelistedKeywords = await getWhitelistKeywords();
+    config.keywordWhitelistBypass = await getSetting('keywordWhitelistBypass', true);
 };
 
-// Function to update a setting and persist it to the database
+// Function to update a setting and persist it
 export const updateSetting = async (key, value) => {
     config[key] = value;
     await setSetting(key, value);

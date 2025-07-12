@@ -34,7 +34,6 @@ export const initDb = async () => {
 };
 
 // --- Keyword Whitelist Logic ---
-
 export const addWhitelistKeyword = (keyword) => {
     return db.run('INSERT OR IGNORE INTO keyword_whitelist (keyword) VALUES (?)', keyword);
 };
@@ -49,7 +48,6 @@ export const getWhitelistKeywords = async () => {
 };
 
 // --- Strike and Audit Logic ---
-
 export const recordStrike = async (userId, logData) => {
     await db.run('BEGIN TRANSACTION');
     try {
@@ -89,14 +87,13 @@ export const getTotalDeletionsToday = async () => {
 };
 
 // --- Settings Logic ---
-
 export const getSetting = async (key, defaultValue) => {
     const row = await db.get('SELECT value FROM settings WHERE key = ?', key);
     if (!row) return defaultValue;
     try {
         return JSON.parse(row.value);
     } catch {
-        return row.value; // Fallback for non-JSON values
+        return row.value;
     }
 };
 

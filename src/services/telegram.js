@@ -53,7 +53,6 @@ export const banUser = (chatId, userId) => {
 
 export const muteUser = (chatId, userId, durationMinutes) => {
   const until_date = Math.floor(Date.now() / 1000) + durationMinutes * 60;
-  // The 'until_date' parameter must be inside the third argument object.
   return bot.restrictChatMember(chatId, userId, {
     can_send_messages: false,
     until_date: until_date
