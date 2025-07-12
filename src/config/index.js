@@ -14,22 +14,30 @@ const config = {
     database: {
         path: process.env.DATABASE_PATH || './moderator.db',
     },
-    // Runtime-configurable settings
+    // --- New Dynamic Penalty Level Settings ---
+    // Each action has its own strike level. 0 means the action is disabled.
+    alertLevel: 1,
+    muteLevel: 2,
+    kickLevel: 3,
+    banLevel: 0, // Disabled by default for safety
+
+    // Other configurable settings
     spamThreshold: 0.85,
-    penaltyMode: PenaltyMode.KICK,
-    penaltyLevel: 3,
     muteDurationMinutes: 60,
-    warningMessage: "Please avoid posting promotional content.",
-    moderatorIds: [], // Manual whitelist for non-admins
+    warningMessage: "Please avoid posting promotional/banned content.",
+    moderatorIds: [],
     whitelistedKeywords: [],
-    keywordWhitelistBypass: true, // If true, AI check is skipped when a keyword is found
+    keywordWhitelistBypass: true,
 };
 
-// Function to load all settings from the database on startup
 export const loadSettingsFromDb = async () => {
+    // Load all settings from the database, using defaults from above if not set
+    config.alertLevel = await getSetting('alertLevel', config.alertLevel);
+    config.muteLevel = await getSetting('muteLevel', config.muteLevel);
+    config.kickLevel = await getSetting('kickLevel', config.kickLevel);
+    config.banLevel = await getSetting('banLevel', config.banLevel);
+    
     config.spamThreshold = await getSetting('spamThreshold', config.spamThreshold);
-    config.penaltyMode = await getSetting('penaltyMode', config.penaltyMode);
-    config.penaltyLevel = await getSetting('penaltyLevel', config.penaltyLevel);
     config.muteDurationMinutes = await getSetting('muteDurationMinutes', config.muteDurationMinutes);
     config.warningMessage = await getSetting('warningMessage', config.warningMessage);
     config.moderatorIds = await getSetting('moderatorIds', []);
@@ -37,7 +45,6 @@ export const loadSettingsFromDb = async () => {
     config.keywordWhitelistBypass = await getSetting('keywordWhitelistBypass', true);
 };
 
-// Function to update a setting and persist it
 export const updateSetting = async (key, value) => {
     config[key] = value;
     await setSetting(key, value);

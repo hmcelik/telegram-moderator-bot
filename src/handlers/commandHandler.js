@@ -1,4 +1,3 @@
-import { PenaltyMode } from '../utils/enums.js';
 import config, { updateSetting } from '../config/index.js';
 import * as db from '../services/database.js';
 import { sendMessage } from '../services/telegram.js';
@@ -16,56 +15,104 @@ export const handleCommand = async (msg) => {
     const [command, ...args] = text.split(' ');
     let response = 'Unknown command. Use /help to see all available commands.';
 
+    // This switch handles the primary commands that have more complex responses.
     switch (command) {
         case '/help':
-            response = `**🤖 Admin Command Center**
-Admins are whitelisted automatically.
+            response = `**🤖 Bot Command Center**
 
-**AI & Whitelist:**
+Here are the commands to configure and manage the bot. Admins are automatically whitelisted from spam checks. Set a level to \`0\` to disable an action.
+
+**⚖️ Penalty Level Commands**
+- \`/set_alert_level <strike_num>\`
+  *Warns the user in chat.*
+- \`/set_mute_level <strike_num>\`
+  *Mutes the user.*
+- \`/set_kick_level <strike_num>\`
+  *Kicks the user (can rejoin).*
+- \`/set_ban_level <strike_num>\`
+  *Bans the user (permanent).*
+
+**🧠 AI & Whitelist Commands**
 - \`/set_threshold <0.1-1.0>\`
-- \`/toggle_bypass\` (Toggle keyword whitelist bypass. Default: ON)
+  *Sets the AI's sensitivity. Higher is stricter.*
+- \`/toggle_bypass\`
+  *Toggles Keyword Bypass Mode. If ON, messages with a whitelisted keyword will skip the AI check entirely.*
 - \`/add_keyword <keyword>\`
+  *Adds a word to the whitelist (e.g., \`shiba\`).*
 - \`/remove_keyword <keyword>\`
 - \`/list_keywords\`
 
-**Penalty System:**
-- \`/set_penalty <kick|ban>\`
-- \`/set_strikes <number>\`
+**⚙️ Other Settings**
 - \`/set_mute_duration <minutes>\`
-
-**Other:**
+- \`/add_mod <userId>\`
+  *Manually whitelists a non-admin user.*
+- \`/remove_mod <userId>\`
+- \`/list_mods\`
 - \`/status\`
-- \`/add_mod <userId>\` (For non-admins)`;
+  *View the bot's current configuration and stats.*`;
             break;
 
         case '/status':
             const deletionsToday = await db.getTotalDeletionsToday();
             response = `**📊 Bot Status & Configuration**
-**AI & Content:**
+
+**⚖️ Penalty Levels** (\`0\` = disabled)
+- Alert on Strike: \`${config.alertLevel}\`
+- Mute on Strike: \`${config.muteLevel}\`
+- Kick on Strike: \`${config.kickLevel}\`
+- Ban on Strike: \`${config.banLevel}\`
+
+**🧠 AI & Content**
 - Spam Threshold: \`${config.spamThreshold}\`
-- Keyword Bypass Mode: \`${config.keywordWhitelistBypass ? 'ON' : 'OFF'}\` (If ON, AI is skipped for whitelisted words)
+- Keyword Bypass Mode: \`${config.keywordWhitelistBypass ? 'ON' : 'OFF'}\`
 
-**Penalty System:**
-- Final Penalty: \`${config.penaltyMode}\`
-- Strikes to Penalty: \`${config.penaltyLevel}\`
+**⚙️ Other Settings**
 - Mute Duration: \`${config.muteDurationMinutes} minutes\`
+- Whitelisted Keywords: \`${config.whitelistedKeywords.join(', ') || 'None'}\`
+- Manual User Whitelist: \`${config.moderatorIds.join(', ') || 'None'}\`
 
-**Whitelists:**
-- Keywords: \`${config.whitelistedKeywords.join(', ') || 'None'}\`
-- Manual User Whitelist: \`${config.moderatorIds.join(', ') || 'None'}\``;
+**📈 Stats**
+- Deletions Today: \`${deletionsToday}\``;
             break;
 
+        // For all other commands, use the helper function to keep this switch clean.
+        default:
+             response = await handleOtherCommands(command, args);
+             break;
+    }
+    await sendMessage(chat.id, response, { parse_mode: 'Markdown' });
+};
+
+/**
+ * Helper function to process all other commands.
+ * @param {string} command The command to process.
+ * @param {string[]} args The arguments for the command.
+ * @returns {Promise<string>} The response message.
+ */
+async function handleOtherCommands(command, args) {
+    let response;
+    const levelCommandRegex = /^\/set_(alert|mute|kick|ban)_level$/;
+
+    if (levelCommandRegex.test(command)) {
+        const level = parseInt(args[0], 10);
+        const type = command.match(levelCommandRegex)[1];
+        const key = `${type}Level`;
+
+        if (!isNaN(level) && level >= 0) {
+            await updateSetting(key, level);
+            response = `✅ ${type.charAt(0).toUpperCase() + type.slice(1)} action will now trigger on strike #${level}. (0 means disabled)`;
+        } else {
+            response = '❌ Invalid input. Level must be a number (0 or greater).';
+        }
+        return response;
+    }
+    
+    switch(command) {
         case '/toggle_bypass':
             const newValue = !config.keywordWhitelistBypass;
             await updateSetting('keywordWhitelistBypass', newValue);
             response = `✅ Keyword Bypass mode is now **${newValue ? 'ON' : 'OFF'}**.`;
-            if(newValue) {
-                response += `\nMessages with whitelisted words will be completely ignored.`
-            } else {
-                response += `\nWhitelisted words will be sent to the AI for context.`
-            }
             break;
-
         case '/add_keyword':
             const keywordToAdd = args[0]?.toLowerCase();
             if (keywordToAdd) {
@@ -76,7 +123,6 @@ Admins are whitelisted automatically.
                 response = '❌ Please provide a keyword.';
             }
             break;
-
         case '/remove_keyword':
             const keywordToRemove = args[0]?.toLowerCase();
             if (keywordToRemove) {
@@ -92,11 +138,9 @@ Admins are whitelisted automatically.
                 response = '❌ Please provide a keyword.';
             }
             break;
-
         case '/list_keywords':
-            response = `**Whitelisted Keywords:**\n- ${config.whitelistedKeywords.join('\n- ') || 'None'}`;
+            response = `**📜 Whitelisted Keywords:**\n- ${config.whitelistedKeywords.join('\n- ') || 'None'}`;
             break;
-
         case '/set_threshold':
             const threshold = parseFloat(args[0]);
             if (!isNaN(threshold) && threshold >= 0.1 && threshold <= 1.0) {
@@ -106,27 +150,6 @@ Admins are whitelisted automatically.
                 response = '❌ Invalid threshold.';
             }
             break;
-
-        case '/set_penalty':
-            const mode = args[0]?.toLowerCase();
-            if (Object.values(PenaltyMode).includes(mode)) {
-                await updateSetting('penaltyMode', mode);
-                response = `✅ Penalty mode set to ${mode}.`;
-            } else {
-                response = '❌ Invalid mode.';
-            }
-            break;
-
-        case '/set_strikes':
-            const level = parseInt(args[0], 10);
-            if (!isNaN(level) && level > 1) {
-                await updateSetting('penaltyLevel', level);
-                response = `✅ Final penalty on strike #${level}.`;
-            } else {
-                response = '❌ Strike level must be > 1.';
-            }
-            break;
-
         case '/set_mute_duration':
             const duration = parseInt(args[0], 10);
             if (!isNaN(duration) && duration > 0) {
@@ -136,7 +159,6 @@ Admins are whitelisted automatically.
                 response = '❌ Invalid duration.';
             }
             break;
-
         case '/set_warning_message':
             const message = args.join(' ');
             if (message) {
@@ -146,7 +168,6 @@ Admins are whitelisted automatically.
                 response = '❌ Please provide a message.';
             }
             break;
-
         case '/add_mod':
             const modIdToAdd = args[0];
             if (modIdToAdd) {
@@ -157,7 +178,6 @@ Admins are whitelisted automatically.
                 response = '❌ Please provide a user ID.';
             }
             break;
-
         case '/remove_mod':
              const modIdToRemove = args[0];
             if (modIdToRemove) {
@@ -168,15 +188,11 @@ Admins are whitelisted automatically.
                 response = '❌ Please provide a user ID.';
             }
             break;
-
         case '/list_mods':
-            response = `**Manually Whitelisted Users:**\n${config.moderatorIds.join('\n') || 'None'}`;
+            response = `**👥 Manually Whitelisted Users:**\n\`${config.moderatorIds.join('\n') || 'None'}\``;
             break;
-
         default:
-            response = 'Unknown command. Use /help to see all available commands.';
-            break;
+            response = 'Unknown command. Use /help.';
     }
-
-    await sendMessage(chat.id, response, { parse_mode: 'Markdown' });
-};
+    return response;
+}
