@@ -2,6 +2,7 @@ import { sendMessage } from '../services/telegram.js';
 import { mainKeyboard } from '../keyboards/mainMenu.js';
 import * as db from '../services/database.js';
 import config from '../config/index.js';
+import { setActiveMenu } from './callbackHandler.js'; // <-- Import the new state manager
 
 const ADMIN_USER_ID = process.env.ADMIN_USER_ID;
 
@@ -17,7 +18,10 @@ export const handleCommand = async (msg) => {
     switch (command) {
         case '/start':
         case '/settings':
-            await sendMessage(chat.id, 'Welcome to the bot settings panel. Please choose a category to configure.', mainKeyboard);
+            // Send the initial menu message
+            const sentMenuMessage = await sendMessage(chat.id, 'Welcome to the bot settings panel. Please choose a category.', mainKeyboard);
+            // --- NEW: Initialize the active menu state ---
+            setActiveMenu(sentMenuMessage);
             break;
 
         case '/status':

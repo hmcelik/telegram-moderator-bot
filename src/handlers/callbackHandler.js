@@ -13,8 +13,32 @@ import bot from '../services/telegram.js';
 
 const ADMIN_USER_ID = process.env.ADMIN_USER_ID;
 
+// State management
 const userState = new Map();
+let activeMenu = {
+    messageId: null,
+    chatId: null,
+    text: '',
+    keyboard: null, // Stores the entire keyboard object
+};
 
+/**
+ * Sets or updates the state of the currently active menu message.
+ * @param {object} message - The Telegram message object for the menu.
+ * @param {string} [text] - Optional new text for the menu.
+ * @param {object} [keyboard] - Optional new keyboard object.
+ */
+export const setActiveMenu = (message, text, keyboard) => {
+    if (!message) return;
+    activeMenu.messageId = message.message_id;
+    activeMenu.chatId = message.chat.id;
+    if (text) activeMenu.text = text;
+    if (keyboard) activeMenu.keyboard = keyboard;
+};
+
+/**
+ * Main handler for all incoming callback queries from inline keyboards.
+ */
 export const handleCallback = async (callbackQuery) => {
     const { from, message, data } = callbackQuery;
     const [action] = data.split(':');
@@ -24,75 +48,86 @@ export const handleCallback = async (callbackQuery) => {
         return;
     }
 
-    logger.info(`Admin callback: ${data}`);
+    logger.info(`Admin callback received: ${data}`);
 
     try {
+        let text, keyboard;
+        let isMenuNavigation = true;
+
         switch (action) {
-            // Main Menu Navigation
             case 'settings_main':
-                await editMessageText('Welcome to the bot settings panel. Please choose a category.', { chat_id: message.chat.id, message_id: message.message_id, ...mainKeyboard });
+                text = 'Welcome to the bot settings panel. Please choose a category.';
+                keyboard = mainKeyboard;
                 break;
             case 'settings_ai_sensitivity':
-                await editMessageText('Configure AI sensitivity settings:', { chat_id: message.chat.id, message_id: message.message_id, ...aiSensitivityKeyboard() });
+                text = 'Configure AI sensitivity settings:';
+                keyboard = aiSensitivityKeyboard();
                 break;
             case 'settings_penalty_levels':
-                await editMessageText('Configure penalty level settings:', { chat_id: message.chat.id, message_id: message.message_id, ...penaltyLevelsKeyboard() });
+                text = 'Configure penalty level settings:';
+                keyboard = penaltyLevelsKeyboard();
                 break;
             case 'settings_whitelist':
-                await editMessageText('Manage keyword and user whitelists:', { chat_id: message.chat.id, message_id: message.message_id, ...whitelistKeyboard });
+                text = 'Manage keyword and user whitelists:';
+                keyboard = whitelistKeyboard;
                 break;
             case 'settings_misc':
-                await editMessageText('Configure miscellaneous settings:', { chat_id: message.chat.id, message_id: message.message_id, ...miscKeyboard() });
+                text = 'Configure miscellaneous settings:';
+                keyboard = miscKeyboard();
                 break;
-
-            // Whitelist Sub-Menu Navigation
             case 'whitelist_keywords':
-                await editMessageText('Manage whitelisted keywords that bypass AI checks.', { chat_id: message.chat.id, message_id: message.message_id, ...keywordMenuKeyboard });
+                text = 'Manage whitelisted keywords that bypass AI checks.';
+                keyboard = keywordMenuKeyboard;
                 break;
             case 'whitelist_mods':
-                await editMessageText('Manage whitelisted moderator IDs.', { chat_id: message.chat.id, message_id: message.message_id, ...moderatorMenuKeyboard });
+                text = 'Manage whitelisted moderator IDs.';
+                keyboard = moderatorMenuKeyboard;
                 break;
 
-            // Actions requiring text input
-            case 'set_threshold':
-            case 'set_alert_level':
-            case 'set_mute_level':
-            case 'set_kick_level':
-            case 'set_ban_level':
-            case 'set_mute_duration':
-            case 'add_keyword':
-            case 'remove_keyword':
-            case 'add_mod':
-            case 'remove_mod':
-                userState.set(from.id, { action: data, message_id: message.message_id });
-                await sendMessage(message.chat.id, `Please send the value for this action.`);
-                break;
-
-            // List Actions
             case 'list_keywords':
-                const keywords = await db.getWhitelistKeywords();
-                const keywordList = keywords.length > 0 ? keywords.join('\n- ') : 'No keywords whitelisted.';
-                await sendMessage(message.chat.id, `**📜 Whitelisted Keywords:**\n- ${keywordList}`, { parse_mode: 'Markdown'});
-                break;
             case 'list_mods':
-                const mods = config.moderatorIds;
-                const mod_list = mods.length > 0 ? mods.join('\n- ') : 'No manual moderators.';
-                await sendMessage(message.chat.id, `**👥 Whitelisted Moderator IDs:**\n- ${mod_list}`, { parse_mode: 'Markdown'});
+                isMenuNavigation = false;
+                const isKeywords = action === 'list_keywords';
+                const items = isKeywords ? await db.getWhitelistKeywords() : config.moderatorIds;
+                const title = isKeywords ? '📜 Whitelisted Keywords' : '👥 Whitelisted Moderator IDs';
+                const itemList = items.length > 0 ? items.map(item => `- \`${item}\``).join('\n') : `No ${isKeywords ? 'keywords' : 'moderators'} whitelisted.`;
+                await sendMessage(message.chat.id, `**${title}**\n${itemList}`, { parse_mode: 'Markdown'});
                 break;
 
-            // Toggle Actions
             case 'toggle_bypass':
                 const newBypassValue = !config.keywordWhitelistBypass;
                 await updateSetting('keywordWhitelistBypass', newBypassValue);
                 await answerCallbackQuery(callbackQuery.id, { text: `Keyword Bypass is now ${newBypassValue ? 'ON' : 'OFF'}` });
-                await editMessageText('Configure AI sensitivity settings:', { chat_id: message.chat.id, message_id: message.message_id, ...aiSensitivityKeyboard() });
+                text = 'Configure AI sensitivity settings:';
+                keyboard = aiSensitivityKeyboard();
                 break;
+
+            default:
+                isMenuNavigation = false;
+                userState.set(from.id, { action: data });
+                await editMessageText(`Please send the new value for **${action.replace(/_/g, ' ')}**.`, {
+                    chat_id: message.chat.id,
+                    message_id: message.message_id,
+                    reply_markup: { inline_keyboard: [] },
+                    parse_mode: 'Markdown'
+                });
+                break;
+        }
+
+        if (isMenuNavigation) {
+            await editMessageText(text, {
+                chat_id: message.chat.id,
+                message_id: message.message_id,
+                ...keyboard,
+                parse_mode: 'Markdown'
+            });
+            // Update the active menu state when we navigate
+            setActiveMenu(message, text, keyboard);
         }
         await answerCallbackQuery(callbackQuery.id);
     } catch (error) {
-        if (error.response && error.response.body.description.includes('message is not modified')) {
+        if (error.response && error.response.body?.description.includes('message is not modified')) {
             logger.warn('Ignoring "message is not modified" error.');
-            await answerCallbackQuery(callbackQuery.id);
         } else {
             logger.error('Error in callback handler:', error);
             await answerCallbackQuery(callbackQuery.id, { text: 'An error occurred.' });
@@ -100,75 +135,72 @@ export const handleCallback = async (callbackQuery) => {
     }
 };
 
+/**
+ * Handler for text messages, specifically to process pending admin inputs.
+ */
 bot.on('text', async (msg) => {
     const { from, text, chat } = msg;
 
-    if (userState.has(from.id)) {
-        const { action, message_id } = userState.get(from.id);
-        userState.delete(from.id);
+    if (from.id.toString() !== ADMIN_USER_ID || !userState.has(from.id)) {
+        return;
+    }
+    
+    const { action } = userState.get(from.id);
+    userState.delete(from.id);
 
-        try {
-            let responseMessage = '✅ Success!';
-            let shouldRefreshMenu = false;
-
-            if (action.startsWith('set_')) {
-                shouldRefreshMenu = true; // Only refresh for settings that change button text
-                const settingKey = action === 'set_threshold' ? 'spamThreshold' : action === 'set_mute_duration' ? 'muteDurationMinutes' : `${action.split('_')[1]}Level`;
-                const value = settingKey === 'spamThreshold' ? parseFloat(text) : parseInt(text, 10);
-
-                if (isNaN(value)) {
-                    await sendMessage(chat.id, 'Invalid number. Please try again.');
-                    return;
-                }
+    try {
+        let responseMessage = '✅ Success!';
+        if (action.startsWith('set_')) {
+            const settingKey = action === 'set_threshold' ? 'spamThreshold' : action === 'set_mute_duration' ? 'muteDurationMinutes' : `${action.split('_')[1]}Level`;
+            const value = settingKey === 'spamThreshold' ? parseFloat(text) : parseInt(text, 10);
+            if (isNaN(value)) {
+                responseMessage = '❌ Invalid number provided.';
+            } else {
                 await updateSetting(settingKey, value);
                 responseMessage = `✅ **${settingKey}** updated to **${value}**.`;
-
-            } else if (action === 'add_keyword') {
-                await db.addWhitelistKeyword(text.toLowerCase());
-                responseMessage = `✅ Keyword "${text}" added.`;
-            } else if (action === 'remove_keyword') {
-                await db.removeWhitelistKeyword(text.toLowerCase());
-                responseMessage = `✅ Keyword "${text}" removed.`;
-            } else if (action === 'add_mod') {
-                const newMods = [...config.moderatorIds, text];
-                await updateSetting('moderatorIds', newMods);
-                responseMessage = `✅ Moderator ID ${text} added.`;
-            } else if (action === 'remove_mod') {
-                const newMods = config.moderatorIds.filter(id => id !== text);
-                await updateSetting('moderatorIds', newMods);
-                responseMessage = `✅ Moderator ID ${text} removed.`;
             }
-
-            await loadSettingsFromDb(); // Ensure config is fresh
-            await sendMessage(chat.id, responseMessage, { parse_mode: 'Markdown' });
-
-            // --- FIX ---
-            // Only refresh if it's a setting with a dynamic button label.
-            if (shouldRefreshMenu) {
-                let menuText, newKeyboard;
-                if (action.includes('level') || action.includes('duration') || action.includes('threshold')) {
-                    if (action.includes('threshold')) {
-                        menuText = 'Configure AI sensitivity settings:'; newKeyboard = aiSensitivityKeyboard();
-                    } else if (action.includes('duration')) {
-                        menuText = 'Configure miscellaneous settings:'; newKeyboard = miscKeyboard();
-                    } else {
-                        menuText = 'Configure penalty level settings:'; newKeyboard = penaltyLevelsKeyboard();
-                    }
-                }
-                
-                if (menuText && newKeyboard && message_id) {
-                    await editMessageText(menuText, { chat_id: chat.id, message_id: message_id, ...newKeyboard });
-                }
-            }
-
-        } catch (error) {
-            // Centralized error handling for the text listener
-             if (error.response && error.response.body.description.includes('message is not modified')) {
-                logger.warn('Ignoring "message is not modified" error during menu refresh.');
-            } else {
-                logger.error(`Failed to process text input for action ${action}:`, error);
-                await sendMessage(chat.id, '❌ An error occurred while processing your request.');
-            }
+        } else if (action.includes('keyword')) {
+            const keyword = text.toLowerCase();
+            if (action === 'add_keyword') await db.addWhitelistKeyword(keyword); else await db.removeWhitelistKeyword(keyword);
+            responseMessage = `✅ Keyword **"${keyword}"** action completed.`;
+        } else if (action.includes('mod')) {
+            const modId = text;
+            let newMods = [...config.moderatorIds];
+            if (action === 'add_mod' && !newMods.includes(modId)) newMods.push(modId); 
+            else if (action === 'remove_mod') newMods = newMods.filter(id => id !== modId);
+            await updateSetting('moderatorIds', newMods);
+            responseMessage = `✅ Moderator ID **${modId}** action completed.`;
         }
+
+        await loadSettingsFromDb();
+        await sendMessage(chat.id, responseMessage, { parse_mode: 'Markdown' });
+
+        // --- FIX: Restore the correct menu with fresh data ---
+        if (activeMenu.text && activeMenu.keyboard) {
+            let menuText = activeMenu.text;
+            let keyboard = activeMenu.keyboard;
+
+            // Determine which menu to restore based on the action taken
+            if (action.startsWith('set_') && !action.includes('keyword') && !action.includes('mod')) {
+                 if (action.includes('threshold')) {
+                    menuText = 'Configure AI sensitivity settings:'; keyboard = aiSensitivityKeyboard();
+                } else if (action.includes('duration')) {
+                    menuText = 'Configure miscellaneous settings:'; keyboard = miscKeyboard();
+                } else { // It's a penalty level
+                    menuText = 'Configure penalty level settings:'; keyboard = penaltyLevelsKeyboard();
+                }
+            } else if (action.includes('keyword')) {
+                menuText = 'Manage whitelisted keywords that bypass AI checks.'; keyboard = keywordMenuKeyboard;
+            } else if (action.includes('mod')) {
+                menuText = 'Manage whitelisted moderator IDs.'; keyboard = moderatorMenuKeyboard;
+            }
+
+            const newMenuMessage = await sendMessage(chat.id, menuText, keyboard);
+            setActiveMenu(newMenuMessage, menuText, keyboard);
+        }
+
+    } catch (error) {
+        logger.error(`Failed to process text input for action ${action}:`, error);
+        await sendMessage(chat.id, '❌ An error occurred while processing your request.');
     }
 });
