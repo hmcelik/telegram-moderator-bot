@@ -6,7 +6,6 @@
 
 import sqlite3 from 'sqlite3';
 import { open } from 'sqlite';
-import config from '../config/index.js';
 import logger from './logger.js';
 
 // The database connection object.
@@ -17,67 +16,122 @@ let db;
  * This function must be called at application startup.
  */
 export const initDb = async () => {
+    const dbPath = process.env.DATABASE_PATH || './moderator.db';
     // Open a connection to the SQLite database file.
     db = await open({
-        filename: config.database.path,
+        filename: dbPath,
         driver: sqlite3.Database,
     });
 
     // Execute CREATE TABLE statements to ensure the required schema exists.
     // 'IF NOT EXISTS' prevents errors on subsequent runs.
     await db.exec(`
-        -- Stores the number of strikes for each user.
+        -- Stores every chat the bot is a member of.
+        CREATE TABLE IF NOT EXISTS groups (
+            chatId TEXT PRIMARY KEY,
+            chatTitle TEXT NOT NULL
+        );
+        -- Stores the number of strikes for each user per group.
         CREATE TABLE IF NOT EXISTS strikes (
-            userId TEXT PRIMARY KEY,
-            count INTEGER NOT NULL DEFAULT 0
+            chatId TEXT NOT NULL,
+            userId TEXT NOT NULL,
+            count INTEGER NOT NULL DEFAULT 0,
+            PRIMARY KEY (chatId, userId)
         );
         -- Logs every moderation action (deletion, penalty).
         CREATE TABLE IF NOT EXISTS audit_log (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             timestamp TEXT NOT NULL,
+            chatId TEXT NOT NULL,
             userId TEXT NOT NULL,
             logData TEXT NOT NULL
         );
-        -- Stores all dynamic configuration settings for the bot.
+        -- Stores all dynamic configuration settings for the bot per group.
         CREATE TABLE IF NOT EXISTS settings (
-            key TEXT PRIMARY KEY,
-            value TEXT NOT NULL
+            chatId TEXT NOT NULL,
+            key TEXT NOT NULL,
+            value TEXT NOT NULL,
+            PRIMARY KEY (chatId, key)
         );
-        -- Stores whitelisted keywords that bypass AI spam checks.
+        -- Stores whitelisted keywords that bypass AI spam checks per group.
         CREATE TABLE IF NOT EXISTS keyword_whitelist (
-            keyword TEXT PRIMARY KEY COLLATE NOCASE -- Case-insensitive matching
+            chatId TEXT NOT NULL,
+            keyword TEXT NOT NULL COLLATE NOCASE, -- Case-insensitive matching
+            PRIMARY KEY (chatId, keyword)
         );
     `);
     logger.info('Database initialized successfully.');
 };
 
+// --- Group Management ---
+
+/**
+ * Adds a group to the database when the bot joins.
+ * @param {string} chatId - The ID of the chat.
+ * @param {string} chatTitle - The title of the chat.
+ * @returns {Promise} A promise that resolves when the operation is complete.
+ */
+export const addGroup = (chatId, chatTitle) => {
+    return db.run('INSERT OR REPLACE INTO groups (chatId, chatTitle) VALUES (?, ?)', chatId, chatTitle);
+};
+
+/**
+ * Removes a group from the database when the bot leaves or is kicked.
+ * @param {string} chatId - The ID of the chat.
+ * @returns {Promise} A promise that resolves when the operation is complete.
+ */
+export const removeGroup = (chatId) => {
+    return db.run('DELETE FROM groups WHERE chatId = ?', chatId);
+};
+
+/**
+ * Retrieves all groups the bot is a member of.
+ * @returns {Promise<Array<{chatId: string, chatTitle: string}>>} A promise that resolves to an array of group objects.
+ */
+export const getAllGroups = () => {
+    return db.all('SELECT * FROM groups');
+};
+
+/**
+ * Retrieves a single group by its ID.
+ * @param {string} chatId - The ID of the chat.
+ * @returns {Promise<{chatId: string, chatTitle: string}>} A promise that resolves to the group object.
+ */
+export const getGroup = (chatId) => {
+    return db.get('SELECT * FROM groups WHERE chatId = ?', chatId);
+};
+
+
 // --- Keyword Whitelist Logic ---
 
 /**
- * Adds a keyword to the whitelist.
+ * Adds a keyword to the whitelist for a specific chat.
  * 'INSERT OR IGNORE' prevents duplicates.
+ * @param {string} chatId - The ID of the chat.
  * @param {string} keyword - The keyword to add.
  * @returns {Promise} A promise that resolves when the operation is complete.
  */
-export const addWhitelistKeyword = (keyword) => {
-    return db.run('INSERT OR IGNORE INTO keyword_whitelist (keyword) VALUES (?)', keyword);
+export const addWhitelistKeyword = (chatId, keyword) => {
+    return db.run('INSERT OR IGNORE INTO keyword_whitelist (chatId, keyword) VALUES (?, ?)', chatId, keyword);
 };
 
 /**
- * Removes a keyword from the whitelist.
+ * Removes a keyword from the whitelist for a specific chat.
+ * @param {string} chatId - The ID of the chat.
  * @param {string} keyword - The keyword to remove.
  * @returns {Promise} A promise that resolves when the operation is complete.
  */
-export const removeWhitelistKeyword = (keyword) => {
-    return db.run('DELETE FROM keyword_whitelist WHERE keyword = ?', keyword);
+export const removeWhitelistKeyword = (chatId, keyword) => {
+    return db.run('DELETE FROM keyword_whitelist WHERE chatId = ? AND keyword = ?', chatId, keyword);
 };
 
 /**
- * Retrieves all keywords from the whitelist.
+ * Retrieves all keywords from the whitelist for a specific chat.
+ * @param {string} chatId - The ID of the chat.
  * @returns {Promise<string[]>} A promise that resolves to an array of keywords.
  */
-export const getWhitelistKeywords = async () => {
-    const rows = await db.all('SELECT keyword FROM keyword_whitelist');
+export const getWhitelistKeywords = async (chatId) => {
+    const rows = await db.all('SELECT keyword FROM keyword_whitelist WHERE chatId = ?', chatId);
     return rows.map(row => row.keyword);
 };
 
@@ -85,31 +139,34 @@ export const getWhitelistKeywords = async () => {
 // --- Strike and Audit Logic ---
 
 /**
- * Records a new strike for a user and logs the event in a single transaction.
+ * Records a new strike for a user in a specific chat and logs the event in a single transaction.
  * A transaction ensures that both operations succeed or neither do.
+ * @param {string} chatId - The ID of the chat.
  * @param {string} userId - The ID of the user receiving the strike.
  * @param {object} logData - Data related to the offense for auditing purposes.
- * @returns {Promise<number>} A promise that resolves to the user's new strike count.
+ * @returns {Promise<number>} A promise that resolves to the user's new strike count in that chat.
  */
-export const recordStrike = async (userId, logData) => {
+export const recordStrike = async (chatId, userId, logData) => {
     await db.run('BEGIN TRANSACTION');
     try {
-        // Increment the user's strike count, or insert a new record if it's their first strike.
+        // Increment the user's strike count for the specific chat, or insert a new record if it's their first strike.
         await db.run(
-            'INSERT INTO strikes (userId, count) VALUES (?, 1) ON CONFLICT(userId) DO UPDATE SET count = count + 1',
+            'INSERT INTO strikes (chatId, userId, count) VALUES (?, ?, 1) ON CONFLICT(chatId, userId) DO UPDATE SET count = count + 1',
+            chatId,
             userId
         );
         // Add a detailed entry to the audit log.
         await db.run(
-            'INSERT INTO audit_log (timestamp, userId, logData) VALUES (?, ?, ?)',
+            'INSERT INTO audit_log (timestamp, chatId, userId, logData) VALUES (?, ?, ?, ?)',
             logData.timestamp,
+            chatId,
             userId,
             JSON.stringify(logData)
         );
         await db.run('COMMIT');
         
         // Return the updated strike count.
-        const { count } = await getStrikes(userId);
+        const { count } = await getStrikes(chatId, userId);
         return count;
     } catch (error) {
         // If any part of the transaction fails, roll back all changes.
@@ -120,30 +177,33 @@ export const recordStrike = async (userId, logData) => {
 };
 
 /**
- * Retrieves the current strike count for a specific user.
+ * Retrieves the current strike count for a specific user in a specific chat.
+ * @param {string} chatId - The ID of the chat.
  * @param {string} userId - The ID of the user.
  * @returns {Promise<{count: number}>} A promise resolving to an object with the user's strike count.
  */
-export const getStrikes = async (userId) => {
-    return await db.get('SELECT count FROM strikes WHERE userId = ?', userId) || { count: 0 };
+export const getStrikes = async (chatId, userId) => {
+    return await db.get('SELECT count FROM strikes WHERE chatId = ? AND userId = ?', chatId, userId) || { count: 0 };
 };
 
 /**
- * Resets a user's strike count to zero.
+ * Resets a user's strike count to zero in a specific chat.
+ * @param {string} chatId - The ID of the chat.
  * @param {string} userId - The ID of the user.
  * @returns {Promise} A promise that resolves when the operation is complete.
  */
-export const resetStrikes = (userId) => {
-    return db.run('UPDATE strikes SET count = 0 WHERE userId = ?', userId);
+export const resetStrikes = (chatId, userId) => {
+    return db.run('UPDATE strikes SET count = 0 WHERE chatId = ? AND userId = ?', chatId, userId);
 };
 
 /**
- * Gets the total number of message deletions recorded today.
+ * Gets the total number of message deletions recorded today in a specific chat.
+ * @param {string} chatId - The ID of the chat.
  * @returns {Promise<number>} A promise that resolves to the count of deletions.
  */
-export const getTotalDeletionsToday = async () => {
+export const getTotalDeletionsToday = async (chatId) => {
     const today = new Date().toISOString().split('T')[0];
-    const result = await db.get(`SELECT COUNT(*) as count FROM audit_log WHERE date(timestamp) = ?`, today);
+    const result = await db.get(`SELECT COUNT(*) as count FROM audit_log WHERE chatId = ? AND date(timestamp) = ?`, chatId, today);
     return result?.count || 0;
 };
 
@@ -151,15 +211,20 @@ export const getTotalDeletionsToday = async () => {
 // --- Settings Logic ---
 
 /**
- * Retrieves a setting's value from the database.
+ * Retrieves a setting's value from the database for a specific chat.
+ * If the setting is not found for the chat, it returns the provided default value.
  * If the value is a JSON string, it is parsed automatically.
+ * @param {string} chatId - The ID of the chat.
  * @param {string} key - The key of the setting to retrieve.
  * @param {*} defaultValue - The value to return if the key is not found.
  * @returns {Promise<*>} A promise that resolves to the setting's value.
  */
-export const getSetting = async (key, defaultValue) => {
-    const row = await db.get('SELECT value FROM settings WHERE key = ?', key);
-    if (!row) return defaultValue;
+export const getSetting = async (chatId, key, defaultValue) => {
+    const row = await db.get('SELECT value FROM settings WHERE chatId = ? AND key = ?', chatId, key);
+    if (!row) {
+        // If a setting is not found, simply return the default value that was passed in.
+        return defaultValue;
+    }
     try {
         // Attempt to parse the value as JSON, falling back to the raw value if it fails.
         return JSON.parse(row.value);
@@ -169,12 +234,13 @@ export const getSetting = async (key, defaultValue) => {
 };
 
 /**
- * Saves or updates a setting in the database.
+ * Saves or updates a setting in the database for a specific chat.
  * The value is JSON stringified before being stored.
+ * @param {string} chatId - The ID of the chat.
  * @param {string} key - The key of the setting to save.
  * @param {*} value - The value of the setting.
  * @returns {Promise} A promise that resolves when the operation is complete.
  */
-export const setSetting = (key, value) => {
-    return db.run('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)', key, JSON.stringify(value));
+export const setSetting = (chatId, key, value) => {
+    return db.run('INSERT OR REPLACE INTO settings (chatId, key, value) VALUES (?, ?, ?)', chatId, key, JSON.stringify(value));
 };
