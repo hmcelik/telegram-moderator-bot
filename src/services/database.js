@@ -16,15 +16,15 @@ let db;
  * This function must be called at application startup.
  */
 export const initDb = async () => {
-    const dbPath = process.env.DATABASE_PATH || './moderator.db';
-    // Open a connection to the SQLite database file.
-    db = await open({
-        filename: dbPath,
-        driver: sqlite3.Database,
-    });
+    // If the database connection is already open, simply ensure the tables exist.
+    if (!db) {
+        const dbPath = process.env.DATABASE_PATH || './moderator.db';
+        db = await open({
+            filename: dbPath,
+            driver: sqlite3.Database,
+        });
+    }
 
-    // Execute CREATE TABLE statements to ensure the required schema exists.
-    // 'IF NOT EXISTS' prevents errors on subsequent runs.
     await db.exec(`
         -- Stores every chat the bot is a member of.
         CREATE TABLE IF NOT EXISTS groups (
@@ -56,11 +56,19 @@ export const initDb = async () => {
         -- Stores whitelisted keywords that bypass AI spam checks per group.
         CREATE TABLE IF NOT EXISTS keyword_whitelist (
             chatId TEXT NOT NULL,
-            keyword TEXT NOT NULL COLLATE NOCASE, -- Case-insensitive matching
+            keyword TEXT NOT NULL COLLATE NOCASE,
             PRIMARY KEY (chatId, keyword)
         );
     `);
     logger.info('Database initialized successfully.');
+};
+
+/**
+ * Injects a database connection object. Used for testing purposes.
+ * @param {object} dbConnection - The database connection object from sqlite.open().
+ */
+export const setDb = (dbConnection) => {
+    db = dbConnection;
 };
 
 // --- Group Management ---
@@ -222,11 +230,9 @@ export const getTotalDeletionsToday = async (chatId) => {
 export const getSetting = async (chatId, key, defaultValue) => {
     const row = await db.get('SELECT value FROM settings WHERE chatId = ? AND key = ?', chatId, key);
     if (!row) {
-        // If a setting is not found, simply return the default value that was passed in.
         return defaultValue;
     }
     try {
-        // Attempt to parse the value as JSON, falling back to the raw value if it fails.
         return JSON.parse(row.value);
     } catch {
         return row.value;
