@@ -1,95 +1,114 @@
-# Telegram Moderator Bot (Multi-Tenant Edition)
+# AI Telegram Moderator Bot
 
-An AI-powered Telegram bot designed to automate chat moderation by intelligently detecting and penalizing promotional spam. This version is refactored to be **multi-tenant**, allowing any user to add the bot to their group and manage it independently.
-
------
+An advanced, multi-tenant Telegram moderation bot built with Node.js. This bot uses AI to detect and act upon spam or promotional content, while providing administrators with a powerful and flexible suite of tools to manage user strikes fairly and transparently.
 
 ## ✨ Features
 
-  * **🤖 AI-Powered Content Moderation**: Leverages OpenAI's GPT-3.5-turbo API to analyze message content and accurately distinguish between legitimate community hype and unsolicited promotional spam.
-  * **🏢 Multi-Tenant Architecture**: The bot can be added to any number of Telegram groups and configured independently for each one. All settings, strikes, and whitelists are isolated per chat.
-  * **🔐 Decentralized Administration**: Any administrator of a Telegram group can manage the bot's settings for that specific group directly from a private chat with the bot.
-  * **⚙️ Interactive Settings UI**: A clean and intuitive inline keyboard interface allows admins to select which group they want to manage, ensuring the right settings are always modified.
-  * **⚖️ Dynamic & Group-Specific Penalties**: Automatically applies escalating penalties (Alert, Mute, Kick, Ban) based on a user's strike count within a specific group. All penalty levels and mute durations are configurable per group.
-  * **🚫 Per-Group Whitelisting**:
-      * **Admin & Moderator Immunity**: Group administrators and manually whitelisted moderators are exempt from all spam checks within their group.
-      * **Keyword Bypass**: Each group can have its own configurable list of keywords that will bypass the AI check.
-  * **💾 Persistent Configuration**: All group-specific settings are saved to a local SQLite database, ensuring your configuration is preserved when the bot restarts.
-  * **📊 Group-Specific Status**: The `/status` command shows a real-time summary of the bot's configuration and daily stats for the group it's used in.
-  * **🧪 Automated Testing**: The project includes a suite of automated tests built with **Vitest** to ensure code quality and reliability.
+- **🤖 AI-Powered Content Analysis**: Uses Natural Language Processing (NLP) to score messages and automatically detect spam, advertisements, and other unwanted content.
+- **⚖️ Advanced Strike System**:
+  - **Automatic Strikes**: Users automatically receive strikes for posting content that violates the configured rules.
+  - **Manual Strike Management**: Admins can add, remove, or set a user's strike count with specific commands, including a reason for the action.
+  - **Strike Expiration**: Strikes can be configured to automatically expire after a set number of days, giving users a chance to clear their record.
+  - **Good Behavior Forgiveness**: Rewards positive participation by automatically removing a strike after a configurable period of good behavior.
+- **🔐 Privacy-Focused**: Commands like `/checkstrikes` and `/mystrikes` send sensitive information via private message to avoid public shaming.
+- **📋 Transparent Auditing**:
+  - **Audit Log**: Admins can view a detailed log of all moderation actions (both automatic and manual) in the group.
+  - **Detailed Strike History**: Admins and users can see a detailed history of each strike, including the reason and date.
+- **⚙️ Per-Group Configuration**: Every setting—from penalty levels to AI sensitivity—can be configured independently for each group via an intuitive private message menu.
+- **🚀 Robust & User-Friendly**:
+  - **Persistent User Data**: User information is stored in a database, ensuring that admin commands work reliably even after a bot restart.
+  - **Clean Chat Interface**: The bot automatically cleans up command messages and temporary error notifications to keep the group chat tidy.
+  - **Smart Help Command**: The `/help` command shows a context-aware list of commands, displaying admin-only commands just to administrators.
 
------
-
-## 🚀 How It Works
-
-The bot's logic is designed to be both effective and fair on a per-group basis:
-
-1.  **Add & Register**: An administrator adds the bot to their group. If the bot is new, it registers automatically. If it was already a member, an admin must use the `/register` command in the group chat.
-2.  **Admin Configuration**: An admin sends the `/settings` command to the bot in a private message. The bot presents a menu to choose which group to manage.
-3.  **Custom Settings**: The admin uses the inline keyboard to configure the settings—such as spam threshold, penalty levels, and whitelists—specifically for the selected group.
-4.  **Message Handling**: When a message is posted in a group, the bot loads the custom configuration for that specific chat.
-5.  **AI Analysis & Action**: If a message from a non-whitelisted user is flagged as spam by the AI, the bot deletes it, records a strike against the user for that group, and applies the appropriate, pre-configured penalty.
-
------
+---
 
 ## 🛠️ Setup and Installation
 
-1.  **Prerequisites**: Make sure you have **Node.js (v21.6.1 or later)** installed.
-2.  **Clone the Repository**:
+1.  **Clone the repository:**
     ```bash
     git clone https://github.com/hmcelik/telegram-moderator-bot.git
     cd telegram-moderator-bot
     ```
-3.  **Install Dependencies**:
+
+2.  **Install dependencies:**
     ```bash
     npm install
     ```
-4.  **Create Environment File**: Create a file named `.env` in the root of the project. This file is ignored by Git. Add the following keys:
+
+3.  **Set up environment variables:**
+    Create a `.env` file in the root of the project and add the following variables:
+
     ```env
-    # Get this from @BotFather on Telegram
-    TELEGRAM_BOT_TOKEN=your_telegram_bot_token_here
+    # Your Telegram Bot Token from BotFather
+    TELEGRAM_BOT_TOKEN=YOUR_TELEGRAM_BOT_TOKEN
 
-    # Your API key from platform.openai.com
-    OPENAI_API_KEY=your_openai_api_key_here
+    # Your OpenAI API Key for content analysis
+    OPENAI_API_KEY=YOUR_OPENAI_API_KEY
 
-    # Your personal Telegram User ID. This ID is for the "Super Admin" role (e.g., for broadcasting messages). It is NOT for managing group settings.
-    ADMIN_USER_ID=your_telegram_user_id_here
+    # (Optional) The numeric Telegram User ID of the bot's super admin
+    ADMIN_USER_ID=YOUR_TELEGRAM_USER_ID
 
-    # (Optional) The path where the database file will be stored. Defaults to ./moderator.db
+    # (Optional) The path to the SQLite database file
     DATABASE_PATH=./moderator.db
     ```
-5.  **Start the Bot**:
-      * For production: `npm start`
-      * For development (with automatic restarts on file changes): `npm run dev`
 
------
+4.  **Run the bot:**
+    ```bash
+    npm start
+    ```
 
-## 👨‍💻 Usage and Configuration
+---
 
-### Adding the Bot to a Group
+## 🤖 Usage Guide
 
-1.  Add the bot to your Telegram group.
-2.  Promote the bot to an **Administrator**. This is required so it can read the admin list and delete messages.
-3.  If the bot was already in the group before its last restart, type `/register` in the group chat. An admin must do this.
+### Public Commands (For all users)
 
-### Configuring a Group
+-   `/help`
+    Shows a list of available commands. Sent privately.
 
-1.  As a group admin, send a private message to the bot with the command `/settings` or `/start`.
-2.  If you are an admin in multiple groups where the bot is present, it will ask you to choose which group you want to manage.
-3.  Use the inline keyboard menus to configure the settings for your selected group. The bot will prompt you for new values when needed.
+-   `/mystrikes`
+    Checks your own strike count and history in the current group. The report is sent privately.
 
-### Menu Structure
+### Administrator Commands
 
-  * **🧠 AI Sensitivity**: Adjust the AI's strictness and toggle the keyword bypass feature.
-  * **⚖️ Penalty Levels**: Set the strike counts that trigger alerts, mutes, kicks, or bans.
-  * **🚫 Whitelist Management**: Manage whitelisted keywords and moderator user IDs.
-  * **⚙️ Miscellaneous**: Configure the mute duration and the custom warning message for users.
+> **Note**: These commands must be used within the group chat.
 
------
+-   `/register`
+    Initializes the bot in a new group. This must be the first command run when adding the bot to a group.
+
+-   `/status`
+    Displays a permanent message in the chat showing the bot's current configuration for that group.
+
+-   `/checkstrikes <@username>`
+    Privately sends you a detailed strike report for the specified user, including their history.
+
+-   `/addstrike <@username> <amount> [reason...]`
+    Adds a specified number of strikes to a user and logs the action with the provided reason.
+    -   *Example*: `/addstrike @testuser 2 Repeatedly off-topic`
+
+-   `/removestrike <@username> [amount] [reason...]`
+    Removes a specified number of strikes from a user. If `[amount]` is omitted, it defaults to `1`.
+    -   *Example*: `/removestrike @testuser 1 Appealed successfully`
+
+-   `/setstrike <@username> <amount> [reason...]`
+    Sets a user's strike count to an exact number. Useful for resetting a user to zero.
+    -   *Example*: `/setstrike @testuser 0 Fresh start`
+
+-   `/auditlog`
+    Privately sends you a detailed report of the last 15 moderation actions in the group, including both automatic and manual strikes.
+
+### Configuration Menu
+
+To configure penalty levels, strike expiration, and other advanced settings, send a private message to the bot with the command:
+- `/settings`
+
+This will open an interactive menu where you can manage the settings for any group in which you are an administrator.
+
+---
 
 ## ✅ Running Tests
 
-The project is equipped with an automated test suite using **Vitest**. To run the tests and ensure everything is working as expected, use the following command:
+The project includes a comprehensive test suite using **Vitest**. To run the tests, use the following command:
 
 ```bash
 npm test

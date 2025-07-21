@@ -7,6 +7,14 @@ import { open } from 'sqlite';
 
 let dbConnection;
 
+// Mock data for tests
+const CHAT_ID = '-1001';
+const USER_ID_1 = '12345';
+const USER_ID_2 = '67890';
+const MOCK_USER_1 = { id: USER_ID_1, first_name: 'Test', username: 'testuser' };
+const MOCK_USER_2 = { id: USER_ID_2, first_name: 'Another', username: 'anotheruser' };
+const MOCK_ADMIN = { id: '99999', first_name: 'Admin' };
+
 // Set up the in-memory database connection ONCE for all tests.
 beforeAll(async () => {
   dbConnection = await open({
@@ -18,13 +26,11 @@ beforeAll(async () => {
 });
 
 // Before EACH test, initialize the schema.
-// This ensures the tables are present for every test.
 beforeEach(async () => {
-    await db.initDb();
+    await db.initDb(true); // Pass true to prevent logging during tests
 });
 
 // After EACH test, delete all data from the tables.
-// This ensures that tests do not interfere with each other.
 afterEach(async () => {
   await dbConnection.exec('DELETE FROM settings');
   await dbConnection.exec('DELETE FROM groups');
@@ -34,54 +40,111 @@ afterEach(async () => {
 });
 
 
-describe('Database Service', () => {
-    const chatId = '-1001';
-    const userId = '12345';
-
+describe('Database Service - Original Tests', () => {
     test('should set and get a setting', async () => {
-        await db.setSetting(chatId, 'spamThreshold', 0.9);
-        const threshold = await db.getSetting(chatId, 'spamThreshold', 0.85);
+        await db.setSetting(CHAT_ID, 'spamThreshold', 0.9);
+        const threshold = await db.getSetting(CHAT_ID, 'spamThreshold', 0.85);
         expect(threshold).toBe(0.9);
     });
 
     test('should return default value for a non-existent setting', async () => {
-        // Since afterEach cleans the DB, this will always be a fresh read.
-        const threshold = await db.getSetting(chatId, 'spamThreshold', 0.85);
+        const threshold = await db.getSetting(CHAT_ID, 'spamThreshold', 0.85);
         expect(threshold).toBe(0.85);
     });
 
     test('should add and retrieve a group', async () => {
-        await db.addGroup(chatId, 'Test Group');
-        const group = await db.getGroup(chatId);
-        expect(group).toEqual({ chatId, chatTitle: 'Test Group' });
+        await db.addGroup(CHAT_ID, 'Test Group');
+        const group = await db.getGroup(CHAT_ID);
+        expect(group).toEqual({ chatId: CHAT_ID, chatTitle: 'Test Group' });
     });
 
     test('should record a strike and update the count', async () => {
-        const logData = { timestamp: new Date().toISOString() };
+        const logData = { type: 'AUTO', timestamp: new Date().toISOString(), user: MOCK_USER_1, messageExcerpt: 'spam', classificationScore: 0.9 };
         
-        let strikeCount = await db.recordStrike(chatId, userId, logData);
+        let strikeCount = await db.recordStrike(CHAT_ID, USER_ID_1, logData);
         expect(strikeCount).toBe(1);
 
-        strikeCount = await db.recordStrike(chatId, userId, logData);
+        strikeCount = await db.recordStrike(CHAT_ID, USER_ID_1, logData);
         expect(strikeCount).toBe(2);
     });
 
     test('should reset strikes', async () => {
-        const logData = { timestamp: new Date().toISOString() };
-        await db.recordStrike(chatId, userId, logData);
+        const logData = { type: 'AUTO', timestamp: new Date().toISOString(), user: MOCK_USER_1, messageExcerpt: 'spam', classificationScore: 0.9 };
+        await db.recordStrike(CHAT_ID, USER_ID_1, logData);
         
-        await db.resetStrikes(chatId, userId);
-        const strikes = await db.getStrikes(chatId, userId);
+        await db.resetStrikes(CHAT_ID, USER_ID_1);
+        const strikes = await db.getStrikes(CHAT_ID, USER_ID_1);
         expect(strikes.count).toBe(0);
     });
 
     test('should manage keyword whitelist', async () => {
-        await db.addWhitelistKeyword(chatId, 'crypto');
-        let keywords = await db.getWhitelistKeywords(chatId);
+        await db.addWhitelistKeyword(CHAT_ID, 'crypto');
+        let keywords = await db.getWhitelistKeywords(CHAT_ID);
         expect(keywords).toContain('crypto');
 
-        await db.removeWhitelistKeyword(chatId, 'crypto');
-        keywords = await db.getWhitelistKeywords(chatId);
+        await db.removeWhitelistKeyword(CHAT_ID, 'crypto');
+        keywords = await db.getWhitelistKeywords(CHAT_ID);
         expect(keywords).not.toContain('crypto');
+    });
+});
+
+describe('Database Service - Manual Strike Management', () => {
+    test('addStrikes should add strikes to a user with none', async () => {
+        const newCount = await db.addStrikes(CHAT_ID, USER_ID_1, 2);
+        expect(newCount).toBe(2);
+    });
+
+    test('addStrikes should add strikes to an existing count', async () => {
+        await db.addStrikes(CHAT_ID, USER_ID_1, 2);
+        const newCount = await db.addStrikes(CHAT_ID, USER_ID_1, 3);
+        expect(newCount).toBe(5);
+    });
+
+    test('removeStrike should subtract strikes from an existing count', async () => {
+        await db.addStrikes(CHAT_ID, USER_ID_1, 5);
+        const newCount = await db.removeStrike(CHAT_ID, USER_ID_1, 2);
+        expect(newCount).toBe(3);
+    });
+
+    test('removeStrike should not go below zero', async () => {
+        await db.addStrikes(CHAT_ID, USER_ID_1, 2);
+        const newCount = await db.removeStrike(CHAT_ID, USER_ID_1, 5);
+        expect(newCount).toBe(0);
+    });
+    
+    test('setStrikes should set the strike count to a specific value', async () => {
+        await db.addStrikes(CHAT_ID, USER_ID_1, 5); // Start with 5
+        await db.setStrikes(CHAT_ID, USER_ID_1, 0);
+        let strikes = await db.getStrikes(CHAT_ID, USER_ID_1);
+        expect(strikes.count).toBe(0);
+
+        await db.setStrikes(CHAT_ID, USER_ID_1, 10);
+        strikes = await db.getStrikes(CHAT_ID, USER_ID_1);
+        expect(strikes.count).toBe(10);
+    });
+
+    test('manual strike adjustments should not update the strike timestamp', async () => {
+        const initialTimestamp = new Date().toISOString();
+        await db.recordStrike(CHAT_ID, USER_ID_1, { type: 'AUTO', timestamp: initialTimestamp, user: MOCK_USER_1, messageExcerpt: 'spam', classificationScore: 0.9 });
+        
+        await db.addStrikes(CHAT_ID, USER_ID_1, 2);
+        await db.removeStrike(CHAT_ID, USER_ID_1, 1);
+        
+        const finalStrikes = await db.getStrikes(CHAT_ID, USER_ID_1);
+        expect(finalStrikes.timestamp).toBe(initialTimestamp);
+    });
+
+    test('getStrikeHistory should retrieve only logs for the specified user', async () => {
+        await db.recordStrike(CHAT_ID, USER_ID_1, { type: 'AUTO', timestamp: new Date().toISOString(), user: MOCK_USER_1, messageExcerpt: 'user 1 spam', classificationScore: 0.9 });
+        await db.logManualAction(CHAT_ID, USER_ID_2, { type: 'MANUAL-STRIKE-ADD', admin: MOCK_ADMIN, targetUser: MOCK_USER_2, amount: 1, reason: 'user 2 manual' });
+
+        const history1 = await db.getStrikeHistory(CHAT_ID, USER_ID_1);
+        const history2 = await db.getStrikeHistory(CHAT_ID, USER_ID_2);
+
+        expect(history1).toHaveLength(1);
+        expect(JSON.parse(history1[0].logData).messageExcerpt).toBe('user 1 spam');
+        
+        expect(history2).toHaveLength(1);
+        expect(JSON.parse(history2[0].logData).reason).toBe('user 2 manual');
     });
 });

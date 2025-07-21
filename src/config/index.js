@@ -33,6 +33,8 @@ const defaultConfig = {
     moderatorIds: [],
     whitelistedKeywords: [],
     keywordWhitelistBypass: true,
+    strikeExpirationDays: 30, // New setting
+    goodBehaviorDays: 7, // New setting
 };
 
 /**
@@ -48,7 +50,8 @@ export const getGroupSettings = async (chatId) => {
     const keys = [
         'alertLevel', 'muteLevel', 'kickLevel', 'banLevel',
         'spamThreshold', 'muteDurationMinutes', 'warningMessage',
-        'warningMessageDeleteSeconds', 'moderatorIds', 'keywordWhitelistBypass'
+        'warningMessageDeleteSeconds', 'moderatorIds', 'keywordWhitelistBypass',
+        'strikeExpirationDays', 'goodBehaviorDays'
     ];
 
     for (const key of keys) {

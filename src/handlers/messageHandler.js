@@ -9,6 +9,7 @@ import * as db from '../services/database.js';
 import { deleteMessage, kickUser, banUser, muteUser, sendMessage, getChatAdmins } from '../services/telegram.js';
 import { getGroupSettings } from '../config/index.js';
 import logger from '../services/logger.js';
+// Removed the obsolete userCache import
 
 /**
  * Escapes characters that are special in Telegram's MarkdownV2 format.
@@ -17,8 +18,8 @@ import logger from '../services/logger.js';
  * @returns {string} The escaped text.
  */
 const escapeMarkdownV2 = (text) => {
-    // The '$&' in the replacement string inserts the matched character.
-    // So, '.' becomes '\.', '*' becomes '\*', etc.
+    if (typeof text !== 'string') return '';
+    // This regex matches all reserved characters for MarkdownV2.
     return text.replace(/[_*[\]()~`>#+\-=|{}.!]/g, '\\$&');
 };
 
@@ -30,6 +31,9 @@ const escapeMarkdownV2 = (text) => {
  */
 export const handleMessage = async (msg) => {
     const { chat, from, text, message_id } = msg;
+
+    // Persist the user who sent the message to the database for future lookups.
+    await db.upsertUser(from);
 
     // IMPORTANT: Ignore all messages in private chats and non-text messages. This bot is for group moderation only.
     if (chat.type === 'private' || !text) {
@@ -49,6 +53,26 @@ export const handleMessage = async (msg) => {
     if (whitelist.includes(from.id.toString())) {
         return;
     }
+    
+    // Good behavior forgiveness
+    if (groupSettings.goodBehaviorDays > 0) {
+        const strikes = await db.getStrikes(chat.id.toString(), from.id.toString());
+        if (strikes.count > 0 && strikes.timestamp) {
+            const lastStrikeDate = new Date(strikes.timestamp);
+            const now = new Date();
+            const diffDays = (now.getTime() - lastStrikeDate.getTime()) / (1000 * 3600 * 24);
+
+            if (diffDays > groupSettings.goodBehaviorDays) {
+                await db.removeStrike(chat.id.toString(), from.id.toString(), 1);
+                try {
+                    await sendMessage(from.id, "Your good behavior has been noticed, and one of your strikes in " + chat.title + " has been removed. Keep it up!");
+                } catch (error) {
+                    logger.warn(`Could not send good behavior forgiveness PM to user ${from.id}`);
+                }
+            }
+        }
+    }
+
 
     // If keyword bypass is enabled, check if the message contains any whitelisted keywords.
     if (groupSettings.keywordWhitelistBypass && groupSettings.whitelistedKeywords.some(kw => text.toLowerCase().includes(kw.toLowerCase()))) {
@@ -67,18 +91,21 @@ export const handleMessage = async (msg) => {
             // 1. Delete the offending message.
             await deleteMessage(chat.id, message_id);
 
-            // 2. Record a strike against the user for this specific chat.
-            const newStrikeCount = await db.recordStrike(chat.id.toString(), from.id.toString(), {
+            // 2. Prepare the log data for the strike.
+            const logData = {
+                type: 'AUTO',
                 timestamp: new Date().toISOString(),
                 user: from,
                 messageExcerpt: text.substring(0, 100),
                 classificationScore: finalScore,
-            });
+            };
 
+            // 3. Record the strike in the database.
+            const newStrikeCount = await db.recordStrike(chat.id.toString(), from.id.toString(), logData);
             logger.info(`User ${from.id} in chat ${chat.id} committed strike #${newStrikeCount}.`);
 
-            // 3. Apply the appropriate penalty based on the new strike count and group-specific settings.
-            await applyPenalty(chat.id, from, newStrikeCount, groupSettings);
+            // 4. Apply the appropriate penalty and pass the logData for more detailed alerts.
+            await applyPenalty(chat.id, from, newStrikeCount, groupSettings, logData);
         }
     } catch (error) {
         logger.error(`Error processing message from ${from.id} in chat ${chat.id}: ${error.message}`, { stack: error.stack });
@@ -92,31 +119,31 @@ export const handleMessage = async (msg) => {
  * @param {object} user - The Telegram user object for the offender.
  * @param {number} strikeCount - The user's new total number of strikes in this chat.
  * @param {object} settings - The settings object for the specific group.
+ * @param {object} [logData] - Optional log data, used for detailed alerts.
  */
-async function applyPenalty(chatId, user, strikeCount, settings) {
+async function applyPenalty(chatId, user, strikeCount, settings, logData) {
     const actions = [
         { level: settings.banLevel, name: 'BAN', execute: () => banUser(chatId, user.id) },
         { level: settings.kickLevel, name: 'KICK', execute: () => kickUser(chatId, user.id) },
         { level: settings.muteLevel, name: 'MUTE', execute: () => muteUser(chatId, user.id, settings.muteDurationMinutes) },
         { level: settings.alertLevel, name: 'ALERT', execute: async () => {
-            // 1. Create the user tag, which is already valid MarkdownV2.
             const escapedName = escapeMarkdownV2(user.first_name);
             const userTag = `[${escapedName}](tg://user?id=${user.id})`;
 
-            // 2. Split the custom warning message by the {user} placeholder.
             const messageParts = settings.warningMessage.split('{user}');
-            const strikePart = ` (Strike ${strikeCount})`;
+            const strikePart = ` \\(Strike ${strikeCount}\\)`;
             
-            // 3. Rebuild the message, escaping the text parts while keeping the user tag unescaped.
-            let finalMessage = escapeMarkdownV2(messageParts[0]); // Escape the first part.
+            // Add the reason (message excerpt) if available
+            const reason = logData ? ` for a message starting with: "*${escapeMarkdownV2(logData.messageExcerpt)}*"` : '';
+
+            let finalMessage = escapeMarkdownV2(messageParts[0]);
             if (messageParts.length > 1) {
-                finalMessage += userTag; // Add the unescaped user tag.
-                // Join the rest of the message parts and escape them.
+                finalMessage += userTag;
                 finalMessage += escapeMarkdownV2(messageParts.slice(1).join('{user}'));
             }
-            finalMessage += escapeMarkdownV2(strikePart); // Escape the final part.
+            finalMessage += reason;
+            finalMessage += strikePart;
 
-            // 4. Send the fully escaped message.
             const sentMsg = await sendMessage(chatId, finalMessage, { parse_mode: 'MarkdownV2' });
 
             if (settings.warningMessageDeleteSeconds > 0) {

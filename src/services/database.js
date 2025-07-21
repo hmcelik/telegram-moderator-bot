@@ -15,10 +15,10 @@ let db;
  * Initializes the database connection and creates tables if they do not exist.
  * This function must be called at application startup.
  */
-export const initDb = async () => {
+export const initDb = async (isTest = false) => {
     // If the database connection is already open, simply ensure the tables exist.
     if (!db) {
-        const dbPath = process.env.DATABASE_PATH || './moderator.db';
+        const dbPath = isTest ? ':memory:' : (process.env.DATABASE_PATH || './moderator.db');
         db = await open({
             filename: dbPath,
             driver: sqlite3.Database,
@@ -31,11 +31,19 @@ export const initDb = async () => {
             chatId TEXT PRIMARY KEY,
             chatTitle TEXT NOT NULL
         );
+        -- Stores permanent user information for lookup.
+        CREATE TABLE IF NOT EXISTS users (
+            userId TEXT PRIMARY KEY,
+            username TEXT,
+            firstName TEXT,
+            lastName TEXT
+        );
         -- Stores the number of strikes for each user per group.
         CREATE TABLE IF NOT EXISTS strikes (
             chatId TEXT NOT NULL,
             userId TEXT NOT NULL,
             count INTEGER NOT NULL DEFAULT 0,
+            timestamp TEXT,
             PRIMARY KEY (chatId, userId)
         );
         -- Logs every moderation action (deletion, penalty).
@@ -60,7 +68,9 @@ export const initDb = async () => {
             PRIMARY KEY (chatId, keyword)
         );
     `);
-    logger.info('Database initialized successfully.');
+    if (!isTest) {
+        logger.info('Database initialized successfully.');
+    }
 };
 
 /**
@@ -71,40 +81,40 @@ export const setDb = (dbConnection) => {
     db = dbConnection;
 };
 
+// --- User Management ---
+
+export const upsertUser = (user) => {
+    if (!user || !user.id) return;
+    return db.run(
+        `INSERT INTO users (userId, username, firstName, lastName) VALUES (?, ?, ?, ?)
+         ON CONFLICT(userId) DO UPDATE SET
+         username = excluded.username,
+         firstName = excluded.firstName,
+         lastName = excluded.lastName`,
+        user.id.toString(), user.username, user.first_name, user.last_name
+    );
+};
+
+export const findUserByUsernameInDb = (username) => {
+    if (!username) return null;
+    return db.get('SELECT * FROM users WHERE username = ? COLLATE NOCASE', username);
+};
+
+
 // --- Group Management ---
 
-/**
- * Adds a group to the database when the bot joins.
- * @param {string} chatId - The ID of the chat.
- * @param {string} chatTitle - The title of the chat.
- * @returns {Promise} A promise that resolves when the operation is complete.
- */
 export const addGroup = (chatId, chatTitle) => {
     return db.run('INSERT OR REPLACE INTO groups (chatId, chatTitle) VALUES (?, ?)', chatId, chatTitle);
 };
 
-/**
- * Removes a group from the database when the bot leaves or is kicked.
- * @param {string} chatId - The ID of the chat.
- * @returns {Promise} A promise that resolves when the operation is complete.
- */
 export const removeGroup = (chatId) => {
     return db.run('DELETE FROM groups WHERE chatId = ?', chatId);
 };
 
-/**
- * Retrieves all groups the bot is a member of.
- * @returns {Promise<Array<{chatId: string, chatTitle: string}>>} A promise that resolves to an array of group objects.
- */
 export const getAllGroups = () => {
     return db.all('SELECT * FROM groups');
 };
 
-/**
- * Retrieves a single group by its ID.
- * @param {string} chatId - The ID of the chat.
- * @returns {Promise<{chatId: string, chatTitle: string}>} A promise that resolves to the group object.
- */
 export const getGroup = (chatId) => {
     return db.get('SELECT * FROM groups WHERE chatId = ?', chatId);
 };
@@ -112,32 +122,14 @@ export const getGroup = (chatId) => {
 
 // --- Keyword Whitelist Logic ---
 
-/**
- * Adds a keyword to the whitelist for a specific chat.
- * 'INSERT OR IGNORE' prevents duplicates.
- * @param {string} chatId - The ID of the chat.
- * @param {string} keyword - The keyword to add.
- * @returns {Promise} A promise that resolves when the operation is complete.
- */
 export const addWhitelistKeyword = (chatId, keyword) => {
     return db.run('INSERT OR IGNORE INTO keyword_whitelist (chatId, keyword) VALUES (?, ?)', chatId, keyword);
 };
 
-/**
- * Removes a keyword from the whitelist for a specific chat.
- * @param {string} chatId - The ID of the chat.
- * @param {string} keyword - The keyword to remove.
- * @returns {Promise} A promise that resolves when the operation is complete.
- */
 export const removeWhitelistKeyword = (chatId, keyword) => {
     return db.run('DELETE FROM keyword_whitelist WHERE chatId = ? AND keyword = ?', chatId, keyword);
 };
 
-/**
- * Retrieves all keywords from the whitelist for a specific chat.
- * @param {string} chatId - The ID of the chat.
- * @returns {Promise<string[]>} A promise that resolves to an array of keywords.
- */
 export const getWhitelistKeywords = async (chatId) => {
     const rows = await db.all('SELECT keyword FROM keyword_whitelist WHERE chatId = ?', chatId);
     return rows.map(row => row.keyword);
@@ -146,24 +138,16 @@ export const getWhitelistKeywords = async (chatId) => {
 
 // --- Strike and Audit Logic ---
 
-/**
- * Records a new strike for a user in a specific chat and logs the event in a single transaction.
- * A transaction ensures that both operations succeed or neither do.
- * @param {string} chatId - The ID of the chat.
- * @param {string} userId - The ID of the user receiving the strike.
- * @param {object} logData - Data related to the offense for auditing purposes.
- * @returns {Promise<number>} A promise that resolves to the user's new strike count in that chat.
- */
 export const recordStrike = async (chatId, userId, logData) => {
     await db.run('BEGIN TRANSACTION');
     try {
-        // Increment the user's strike count for the specific chat, or insert a new record if it's their first strike.
         await db.run(
-            'INSERT INTO strikes (chatId, userId, count) VALUES (?, ?, 1) ON CONFLICT(chatId, userId) DO UPDATE SET count = count + 1',
+            'INSERT INTO strikes (chatId, userId, count, timestamp) VALUES (?, ?, 1, ?) ON CONFLICT(chatId, userId) DO UPDATE SET count = count + 1, timestamp = ?',
             chatId,
-            userId
+            userId,
+            new Date().toISOString(),
+            new Date().toISOString()
         );
-        // Add a detailed entry to the audit log.
         await db.run(
             'INSERT INTO audit_log (timestamp, chatId, userId, logData) VALUES (?, ?, ?, ?)',
             logData.timestamp,
@@ -172,66 +156,85 @@ export const recordStrike = async (chatId, userId, logData) => {
             JSON.stringify(logData)
         );
         await db.run('COMMIT');
-        
-        // Return the updated strike count.
+
         const { count } = await getStrikes(chatId, userId);
         return count;
     } catch (error) {
-        // If any part of the transaction fails, roll back all changes.
         await db.run('ROLLBACK');
         logger.error('Failed to record strike in transaction', error);
         throw error;
     }
 };
 
-/**
- * Retrieves the current strike count for a specific user in a specific chat.
- * @param {string} chatId - The ID of the chat.
- * @param {string} userId - The ID of the user.
- * @returns {Promise<{count: number}>} A promise resolving to an object with the user's strike count.
- */
+export const logManualAction = (chatId, userId, logData) => {
+    return db.run(
+        'INSERT INTO audit_log (timestamp, chatId, userId, logData) VALUES (?, ?, ?, ?)',
+        new Date().toISOString(),
+        chatId,
+        userId,
+        JSON.stringify(logData)
+    );
+};
+
 export const getStrikes = async (chatId, userId) => {
-    return await db.get('SELECT count FROM strikes WHERE chatId = ? AND userId = ?', chatId, userId) || { count: 0 };
+    await recalculateStrikes(chatId, userId);
+    return await db.get('SELECT count, timestamp FROM strikes WHERE chatId = ? AND userId = ?', chatId, userId) || { count: 0, timestamp: null };
 };
 
-/**
- * Resets a user's strike count to zero in a specific chat.
- * @param {string} chatId - The ID of the chat.
- * @param {string} userId - The ID of the user.
- * @returns {Promise} A promise that resolves when the operation is complete.
- */
 export const resetStrikes = (chatId, userId) => {
-    return db.run('UPDATE strikes SET count = 0 WHERE chatId = ? AND userId = ?', chatId, userId);
+    return db.run('UPDATE strikes SET count = 0, timestamp = NULL WHERE chatId = ? AND userId = ?', chatId, userId);
 };
 
-/**
- * Gets the total number of message deletions recorded today in a specific chat.
- * @param {string} chatId - The ID of the chat.
- * @returns {Promise<number>} A promise that resolves to the count of deletions.
- */
+export const addStrikes = async (chatId, userId, amount) => {
+    await db.run(
+        `INSERT INTO strikes (chatId, userId, count) VALUES (?, ?, ?)
+         ON CONFLICT(chatId, userId) DO UPDATE SET count = count + excluded.count`,
+        chatId, userId, amount
+    );
+    const { count } = await getStrikes(chatId, userId);
+    return count;
+};
+
+export const removeStrike = async (chatId, userId, amount) => {
+    const currentStrikes = await getStrikes(chatId, userId);
+    if (currentStrikes.count === 0) return 0;
+    const newCount = Math.max(0, currentStrikes.count - amount);
+    await db.run('UPDATE strikes SET count = ? WHERE chatId = ? AND userId = ?', newCount, chatId, userId);
+    return newCount;
+};
+
+export const setStrikes = async (chatId, userId, amount) => {
+    // Only set a timestamp if the user has no strikes and is being given one or more.
+    // Otherwise, the timestamp of the original offense is preserved.
+    await db.run(
+        `INSERT INTO strikes (chatId, userId, count, timestamp)
+         VALUES (?, ?, ?, CASE WHEN ? > 0 THEN ? ELSE NULL END)
+         ON CONFLICT(chatId, userId) DO UPDATE SET count = excluded.count`,
+        chatId, userId, amount, amount, new Date().toISOString()
+    );
+    const { count } = await getStrikes(chatId, userId);
+    return count;
+};
+
 export const getTotalDeletionsToday = async (chatId) => {
     const today = new Date().toISOString().split('T')[0];
     const result = await db.get(`SELECT COUNT(*) as count FROM audit_log WHERE chatId = ? AND date(timestamp) = ?`, chatId, today);
     return result?.count || 0;
 };
 
+export const getAuditLog = (chatId, limit = 15) => {
+    return db.all('SELECT * FROM audit_log WHERE chatId = ? ORDER BY timestamp DESC LIMIT ?', chatId, limit);
+};
+
+export const getStrikeHistory = (chatId, userId, limit = 10) => {
+    return db.all('SELECT * FROM audit_log WHERE chatId = ? AND userId = ? ORDER BY timestamp DESC LIMIT ?', chatId, userId, limit);
+};
 
 // --- Settings Logic ---
 
-/**
- * Retrieves a setting's value from the database for a specific chat.
- * If the setting is not found for the chat, it returns the provided default value.
- * If the value is a JSON string, it is parsed automatically.
- * @param {string} chatId - The ID of the chat.
- * @param {string} key - The key of the setting to retrieve.
- * @param {*} defaultValue - The value to return if the key is not found.
- * @returns {Promise<*>} A promise that resolves to the setting's value.
- */
 export const getSetting = async (chatId, key, defaultValue) => {
     const row = await db.get('SELECT value FROM settings WHERE chatId = ? AND key = ?', chatId, key);
-    if (!row) {
-        return defaultValue;
-    }
+    if (!row) return defaultValue;
     try {
         return JSON.parse(row.value);
     } catch {
@@ -239,14 +242,15 @@ export const getSetting = async (chatId, key, defaultValue) => {
     }
 };
 
-/**
- * Saves or updates a setting in the database for a specific chat.
- * The value is JSON stringified before being stored.
- * @param {string} chatId - The ID of the chat.
- * @param {string} key - The key of the setting to save.
- * @param {*} value - The value of the setting.
- * @returns {Promise} A promise that resolves when the operation is complete.
- */
 export const setSetting = (chatId, key, value) => {
     return db.run('INSERT OR REPLACE INTO settings (chatId, key, value) VALUES (?, ?, ?)', chatId, key, JSON.stringify(value));
+};
+
+export const recalculateStrikes = async (chatId, userId) => {
+    const strikeExpirationDays = await getSetting(chatId, 'strikeExpirationDays', 30);
+    if (strikeExpirationDays > 0) {
+        const expirationDate = new Date();
+        expirationDate.setDate(expirationDate.getDate() - strikeExpirationDays);
+        await db.run('DELETE FROM strikes WHERE chatId = ? AND userId = ? AND timestamp < ?', chatId, userId, expirationDate.toISOString());
+    }
 };

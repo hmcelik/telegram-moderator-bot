@@ -52,7 +52,28 @@ export const getChatAdmins = async (chatId) => {
 };
 
 /**
- * Deletes a message from a chat.
+ * Gets information about a specific member of a chat.
+ * @param {string|number} chatId - The ID of the target chat.
+ * @param {number} userId - The ID of the user to look up.
+ * @returns {Promise<object|null>} A promise that resolves to the chat member object, or null on failure.
+ */
+export const getChatMember = async (chatId, userId) => {
+    try {
+        const member = await bot.getChatMember(chatId, userId);
+        return member;
+    } catch (error) {
+        // This error is expected if the user is not in the chat.
+        if (error.response && error.response.body.description.includes("user not found")) {
+            return null;
+        }
+        logger.error(`Failed to get chat member ${userId} in chat ${chatId}:`, error.response?.body || error.message);
+        return null;
+    }
+};
+
+
+/**
+ * Deletes a message from a chat, ignoring "not found" errors.
  *
  * @param {string|number} chatId - The ID of the chat.
  * @param {number} messageId - The ID of the message to delete.
@@ -61,6 +82,10 @@ export const deleteMessage = async (chatId, messageId) => {
   try {
     await bot.deleteMessage(chatId, messageId);
   } catch(error) {
+    // **FIX**: If the message is already deleted, just ignore the error and don't log it.
+    if (error.response && error.response.body.description.includes("message to delete not found")) {
+        return; // Silently fail
+    }
     logger.error(`Failed to delete message ${messageId} in chat ${chatId}`, error.response?.body || error.message)
   }
 };
@@ -129,6 +154,18 @@ export const sendMessage = (chatId, text, options) => {
 };
 
 /**
+ * Sends a document (file) to a chat.
+ * @param {string|number} chatId - The ID of the chat.
+ * @param {Buffer} fileBuffer - The file content as a buffer.
+ * @param {object} [options] - Additional options for the Telegram API.
+ * @param {object} [fileOptions] - Options for the file itself (e.g., filename).
+ * @returns {Promise<object>} A promise that resolves to the sent message object.
+ */
+export const sendDocument = (chatId, fileBuffer, options = {}, fileOptions = {}) => {
+    return bot.sendDocument(chatId, fileBuffer, options, fileOptions);
+};
+
+/**
  * Edits the text of an existing message.
  *
  * @param {string} text - The new text for the message.
@@ -141,8 +178,6 @@ export const editMessageText = (text, options) => {
 
 /**
  * Answers a callback query from an inline keyboard.
- * This is used to provide feedback to the user (e.g., a notification)
- * and to stop the "loading" animation on the button they pressed.
  *
  * @param {string} callbackQueryId - The ID of the callback query.
  * @param {object} [options] - Additional options, such as the text to display.
