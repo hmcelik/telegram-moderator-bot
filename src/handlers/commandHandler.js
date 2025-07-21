@@ -467,8 +467,11 @@ async function showGroupSelection(userId, chatId, nextAction = 'settings', requi
                     const response = `**📊 Bot Status & Configuration for ${group.chatTitle}**...`; // Truncated for brevity
                     await sendMessage(chatId, response, { parse_mode: 'Markdown' });
                  } else { // 'settings'
-                    const sentMenuMessage = await sendMessage(chatId, `Managing settings for **${group.chatTitle}**. Please choose a category.`, { ...mainKeyboard, parse_mode: 'Markdown' });
-                    setActiveMenu(sentMenuMessage, `Managing settings for **${group.chatTitle}**.`, mainKeyboard, targetChatId);
+                    const text = `Managing settings for **${group.chatTitle}**. Please choose a category.`;
+                    // Pass the targetChatId to the mainKeyboard function to create stateless buttons
+                    const keyboard = mainKeyboard(targetChatId);
+                    const sentMenuMessage = await sendMessage(chatId, text, { ...keyboard, parse_mode: 'Markdown' });
+                    setActiveMenu(sentMenuMessage, text, keyboard);
                  }
             }
             return;

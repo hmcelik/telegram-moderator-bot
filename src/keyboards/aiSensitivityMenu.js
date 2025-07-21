@@ -8,17 +8,18 @@
  * labels reflect the current configuration values for the specific group.
  *
  * @param {object} settings - The settings object for the group being configured.
+ * @param {string} chatId - The ID of the group being configured.
  * @returns {object} The keyboard layout object for the Telegram API.
  */
-export const aiSensitivityKeyboard = (settings) => ({
+export const aiSensitivityKeyboard = (settings, chatId) => ({
     reply_markup: {
         inline_keyboard: [
             // Button to set the spam detection threshold.
-            [{ text: `Set Threshold (current: ${settings.spamThreshold})`, callback_data: 'set_threshold' }],
+            [{ text: `Set Threshold (current: ${settings.spamThreshold})`, callback_data: `set_threshold:${chatId}` }],
             // Button to toggle the keyword bypass feature.
-            [{ text: `Toggle Bypass (current: ${settings.keywordWhitelistBypass ? 'ON' : 'OFF'})`, callback_data: 'toggle_bypass' }],
+            [{ text: `Toggle Bypass (current: ${settings.keywordWhitelistBypass ? 'ON' : 'OFF'})`, callback_data: `toggle_bypass:${chatId}` }],
             // Navigation button to return to the main menu.
-            [{ text: '⬅️ Back', callback_data: 'settings_main' }],
+            [{ text: '⬅️ Back', callback_data: `settings_main:${chatId}` }],
         ],
     },
 });

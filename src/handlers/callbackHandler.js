@@ -18,28 +18,26 @@ import * as db from '../services/database.js';
 import bot from '../services/telegram.js';
 import { escapeMarkdownV2 } from './commandHandler.js';
 
-// A simple in-memory store for tracking pending admin actions.
+// A simple in-memory store for tracking pending admin actions (e.g., waiting for text input).
 const userState = new Map();
 
-// Holds the state of the current active settings menu.
+// This object no longer holds the group context (targetChatId), only the message details for editing.
 let activeMenu = {
     messageId: null,
     chatId: null,
     text: '',
     keyboard: null,
-    targetChatId: null, // The group being configured
 };
 
 /**
  * Sets or updates the state of the currently active menu message.
  */
-export const setActiveMenu = (message, text, keyboard, targetChatId) => {
+export const setActiveMenu = (message, text, keyboard) => {
     if (!message) return;
     activeMenu.messageId = message.message_id;
     activeMenu.chatId = message.chat.id;
     if (text) activeMenu.text = text;
     if (keyboard) activeMenu.keyboard = keyboard;
-    if (targetChatId) activeMenu.targetChatId = targetChatId;
 };
 
 /**
@@ -47,20 +45,24 @@ export const setActiveMenu = (message, text, keyboard, targetChatId) => {
  */
 export const handleCallback = async (callbackQuery) => {
     const { from, message, data } = callbackQuery;
-    const [action, ...params] = data.split(':');
+    const [action, targetChatId, ...params] = data.split(':');
 
     logger.info(`Callback received from ${from.id}: ${data}`);
+
+    // Optimization: Fail-fast if the essential targetChatId is missing for most actions.
+    if (action !== 'select_group' && !targetChatId) {
+        logger.warn(`Callback handler invoked without a targetChatId for user ${from.id}. Data: ${data}`);
+        await telegram.answerCallbackQuery(callbackQuery.id, { text: 'Your session may have expired. Please use /settings again.' });
+        return;
+    }
 
     try {
         let text, keyboard;
         let isMenuNavigation = true;
-        let targetChatId = userState.get(from.id)?.targetChatId || activeMenu.targetChatId;
 
         if (action === 'select_group') {
-            const [selectedChatId, nextAction] = params;
-            userState.set(from.id, { targetChatId: selectedChatId });
-            targetChatId = selectedChatId;
-            const group = await db.getGroup(selectedChatId);
+            const nextAction = params[0];
+            const group = await db.getGroup(targetChatId);
             
             if (!group) {
                 await telegram.answerCallbackQuery(callbackQuery.id, { text: 'Error: Group not found.' });
@@ -107,48 +109,42 @@ export const handleCallback = async (callbackQuery) => {
                 await telegram.editMessageText(report, { chat_id: message.chat.id, message_id: message.message_id, parse_mode: 'MarkdownV2' });
             } else { // Default to settings
                  text = `Managing settings for **${group.chatTitle}**. Please choose a category.`;
-                 keyboard = mainKeyboard;
+                 keyboard = mainKeyboard(targetChatId);
             }
 
         } else {
-            if (!targetChatId) {
-                logger.warn(`Callback handler invoked without a targetChatId for user ${from.id}`);
-                await telegram.answerCallbackQuery(callbackQuery.id, { text: 'Your session expired. Please start with /settings again.' });
-                return;
-            }
             const groupSettings = await getGroupSettings(targetChatId);
 
             switch (action) {
                 case 'settings_main':
                     const group = await db.getGroup(targetChatId);
                     text = `Managing settings for **${group.chatTitle}**. Please choose a category.`;
-                    keyboard = mainKeyboard;
+                    keyboard = mainKeyboard(targetChatId);
                     break;
                 case 'settings_ai_sensitivity':
                     text = 'Configure AI sensitivity settings:';
-                    keyboard = aiSensitivityKeyboard(groupSettings);
+                    keyboard = aiSensitivityKeyboard(groupSettings, targetChatId);
                     break;
                 case 'settings_penalty_levels':
                     text = 'Configure penalty level settings:';
-                    keyboard = penaltyLevelsKeyboard(groupSettings);
+                    keyboard = penaltyLevelsKeyboard(groupSettings, targetChatId);
                     break;
                 case 'settings_whitelist':
                     text = 'Manage keyword and user whitelists:';
-                    keyboard = whitelistKeyboard;
+                    keyboard = whitelistKeyboard(targetChatId);
                     break;
                 case 'settings_misc':
                     text = 'Configure miscellaneous settings:';
-                    keyboard = miscKeyboard(groupSettings);
+                    keyboard = miscKeyboard(groupSettings, targetChatId);
                     break;
                 case 'whitelist_keywords':
                     text = 'Manage whitelisted keywords that bypass AI checks.';
-                    keyboard = keywordMenuKeyboard;
+                    keyboard = keywordMenuKeyboard(targetChatId);
                     break;
                 case 'whitelist_mods':
                     text = 'Manage whitelisted moderator IDs.';
-                    keyboard = moderatorMenuKeyboard;
+                    keyboard = moderatorMenuKeyboard(targetChatId);
                     break;
-
                 case 'list_keywords':
                 case 'list_mods':
                     isMenuNavigation = false;
@@ -157,7 +153,8 @@ export const handleCallback = async (callbackQuery) => {
                     const title = isKeywords ? '📜 Whitelisted Keywords' : '👥 Whitelisted Moderator IDs';
                     const itemList = items.length > 0 ? items.map(item => `- \`${item}\``).join('\n') : `No ${isKeywords ? 'keywords' : 'moderators'} whitelisted.`;
                     await telegram.sendMessage(message.chat.id, `**${title}**\n${itemList}`, { parse_mode: 'Markdown'});
-                    break;
+                    await telegram.answerCallbackQuery(callbackQuery.id);
+                    return;
 
                 case 'toggle_bypass':
                     const newBypassValue = !groupSettings.keywordWhitelistBypass;
@@ -165,7 +162,7 @@ export const handleCallback = async (callbackQuery) => {
                     await telegram.answerCallbackQuery(callbackQuery.id, { text: `Keyword Bypass is now ${newBypassValue ? 'ON' : 'OFF'}` });
                     const updatedSettingsForBypass = await getGroupSettings(targetChatId);
                     text = 'Configure AI sensitivity settings:';
-                    keyboard = aiSensitivityKeyboard(updatedSettingsForBypass);
+                    keyboard = aiSensitivityKeyboard(updatedSettingsForBypass, targetChatId);
                     break;
 
                 default:
@@ -202,7 +199,7 @@ export const handleCallback = async (callbackQuery) => {
                 ...keyboard,
                 parse_mode: 'Markdown'
             });
-            setActiveMenu(message, text, keyboard, targetChatId);
+            setActiveMenu(message, text, keyboard);
         }
         await telegram.answerCallbackQuery(callbackQuery.id);
     } catch (error) {
@@ -225,12 +222,11 @@ bot.on('text', async (msg) => {
         return;
     }
 
-    const { action, targetChatId } = userState.get(from.id);
+    const { action: data, targetChatId } = userState.get(from.id);
+    const [action] = data.split(':');
     userState.delete(from.id);
 
     if (!targetChatId || !action) {
-        // This is not a critical error, just a message that was not meant for the bot's workflow.
-        // We log it as a warning for debugging but don't crash.
         logger.warn(`Text input received without a valid state for user ${from.id}. Action: ${action}`);
         return;
     }
@@ -239,41 +235,65 @@ bot.on('text', async (msg) => {
         let responseMessage = '✅ Success!';
         let settingKey, value;
 
+        const handleNumericInput = (text, nonNegative = false) => {
+            const num = parseInt(text, 10);
+            if (isNaN(num) || (nonNegative && num < 0)) {
+                return { valid: false, value: null };
+            }
+            return { valid: true, value: num };
+        };
+        
+        const handleFloatInput = (text) => {
+            const num = parseFloat(text);
+            if (isNaN(num)) return { valid: false, value: null };
+            return { valid: true, value: num };
+        };
+
         if (action.startsWith('set_')) {
+            let result;
             switch (action) {
                 case 'set_threshold':
-                    settingKey = 'spamThreshold';
-                    value = parseFloat(text);
+                    result = handleFloatInput(text);
+                    if (result.valid && (result.value < 0 || result.value > 1)) {
+                         responseMessage = `❌ Invalid value. Threshold must be between 0 and 1.`;
+                    } else {
+                         settingKey = 'spamThreshold';
+                         value = result.value;
+                    }
                     break;
                 case 'set_mute_duration':
+                    result = handleNumericInput(text, true); // Must be non-negative
                     settingKey = 'muteDurationMinutes';
-                    value = parseInt(text, 10);
+                    value = result.value;
+                    if (!result.valid) responseMessage = `❌ Invalid value. Duration must be a positive number.`;
                     break;
                 case 'set_warning_delete_seconds':
+                    result = handleNumericInput(text, true);
                     settingKey = 'warningMessageDeleteSeconds';
-                    value = parseInt(text, 10);
+                    value = result.value;
+                    if (!result.valid) responseMessage = `❌ Invalid value. Timer must be a positive number.`;
                     break;
+                case 'set_strike_expiration':
+                case 'set_good_behavior':
+                     result = handleNumericInput(text, true);
+                     settingKey = action === 'set_strike_expiration' ? 'strikeExpirationDays' : 'goodBehaviorDays';
+                     value = result.value;
+                     if (!result.valid) responseMessage = `❌ Invalid value. Days must be a positive number.`;
+                     break;
                 case 'set_warning_message':
                     settingKey = 'warningMessage';
                     value = text;
                     break;
-                case 'set_strike_expiration':
-                    settingKey = 'strikeExpirationDays';
-                    value = parseInt(text, 10);
-                    break;
-                case 'set_good_behavior':
-                    settingKey = 'goodBehaviorDays';
-                    value = parseInt(text, 10);
-                    break;
-                default:
-                    settingKey = `${action.split('_')[1]}Level`;
-                    value = parseInt(text, 10);
+                default: // Penalty Levels
+                    result = handleNumericInput(text, true);
+                    const levelType = action.substring(4, action.lastIndexOf('_level'));
+                    settingKey = `${levelType}Level`;
+                    value = result.value;
+                    if (!result.valid) responseMessage = `❌ Invalid value. Strike level must be a positive number.`;
                     break;
             }
 
-            if (value === undefined || (typeof value === 'number' && isNaN(value))) {
-                responseMessage = `❌ Invalid value provided.`;
-            } else {
+            if (value !== undefined && value !== null) {
                 await updateSetting(targetChatId, settingKey, value);
                 responseMessage = `✅ **${settingKey.replace(/([A-Z])/g, ' $1').trim()}** updated successfully.`;
             }
@@ -284,44 +304,46 @@ bot.on('text', async (msg) => {
             responseMessage = `✅ Keyword **"${keyword}"** action completed.`;
         } else if (action.includes('mod')) {
             const modId = text.trim();
-            const groupSettings = await getGroupSettings(targetChatId);
-            let newMods = [...groupSettings.moderatorIds];
-            if (action === 'add_mod' && !newMods.includes(modId)) newMods.push(modId);
-            else if (action === 'remove_mod') newMods = newMods.filter(id => id !== modId);
-            await updateSetting(targetChatId, 'moderatorIds', newMods);
-            responseMessage = `✅ Moderator ID **${modId}** action completed.`;
+            if (!/^\d+$/.test(modId)) {
+                responseMessage = `❌ Invalid input. Please provide a numeric User ID.`;
+            } else {
+                const groupSettings = await getGroupSettings(targetChatId);
+                let newMods = [...groupSettings.moderatorIds];
+                if (action === 'add_mod' && !newMods.includes(modId)) newMods.push(modId);
+                else if (action === 'remove_mod') newMods = newMods.filter(id => id !== modId);
+                await updateSetting(targetChatId, 'moderatorIds', newMods);
+                responseMessage = `✅ Moderator ID **${modId}** action completed.`;
+            }
         }
 
         await telegram.sendMessage(chat.id, responseMessage, { parse_mode: 'Markdown' });
 
-        // Restore the menu
         const updatedSettings = await getGroupSettings(targetChatId);
         const group = await db.getGroup(targetChatId);
-        let menuText = `Managing settings for **${group.chatTitle}**.`;
-        let keyboard;
+        let menuText, keyboard;
 
-        if (action.includes('threshold') || action.includes('bypass')) {
+        if (['set_threshold', 'toggle_bypass'].includes(action)) {
             menuText = 'Configure AI sensitivity settings:';
-            keyboard = aiSensitivityKeyboard(updatedSettings);
-        } else if (action.includes('duration') || action.includes('warning') || action.includes('expiration') || action.includes('behavior')) {
+            keyboard = aiSensitivityKeyboard(updatedSettings, targetChatId);
+        } else if (['set_mute_duration', 'set_warning_delete_seconds', 'set_warning_message', 'set_strike_expiration', 'set_good_behavior'].includes(action)) {
             menuText = 'Configure miscellaneous settings:';
-            keyboard = miscKeyboard(updatedSettings);
+            keyboard = miscKeyboard(updatedSettings, targetChatId);
         } else if (action.startsWith('set_') && action.includes('level')) {
             menuText = 'Configure penalty level settings:';
-            keyboard = penaltyLevelsKeyboard(updatedSettings);
+            keyboard = penaltyLevelsKeyboard(updatedSettings, targetChatId);
         } else if (action.includes('keyword')) {
             menuText = 'Manage whitelisted keywords that bypass AI checks.';
-            keyboard = keywordMenuKeyboard;
+            keyboard = keywordMenuKeyboard(targetChatId);
         } else if (action.includes('mod')) {
             menuText = 'Manage whitelisted moderator IDs.';
-            keyboard = moderatorMenuKeyboard;
+            keyboard = moderatorMenuKeyboard(targetChatId);
         } else {
             menuText = `Managing settings for **${group.chatTitle}**. Please choose a category.`;
-            keyboard = mainKeyboard;
+            keyboard = mainKeyboard(targetChatId);
         }
 
-        const newMenuMessage = await telegram.sendMessage(chat.id, menuText, keyboard);
-        setActiveMenu(newMenuMessage, menuText, keyboard, targetChatId);
+        const newMenuMessage = await telegram.sendMessage(chat.id, menuText, { ...keyboard, parse_mode: 'Markdown' });
+        setActiveMenu(newMenuMessage, menuText, keyboard);
 
     } catch (error) {
         logger.error(`Failed to process text input for action ${action}:`, error);
