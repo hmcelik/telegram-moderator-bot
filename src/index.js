@@ -11,6 +11,43 @@ import { handleCallback } from './handlers/callbackHandler.js';
 import logger from './services/logger.js';
 
 /**
+ * Registers Telegram slash commands with appropriate scopes.
+ */
+const registerBotCommands = async () => {
+    try {
+        const publicCommands = [
+            { command: 'help', description: 'Show help information' },
+            { command: 'mystrikes', description: 'Check your own strike count' },
+            { command: 'settings', description: 'Open settings menu privately' }
+        ];
+
+        const adminOnlyCommands = [
+            { command: 'register', description: 'Register the bot in this group' },
+            { command: 'status', description: 'Show the bot\'s configuration' },
+            { command: 'checkstrikes', description: 'View a user\'s strike history' },
+            { command: 'addstrike', description: 'Add strikes to a user' },
+            { command: 'removestrike', description: 'Remove strikes from a user' },
+            { command: 'setstrike', description: 'Set a user\'s strike count' },
+            { command: 'auditlog', description: 'View recent moderation actions' }
+        ];
+
+        // Set public commands (for everyone)
+        await bot.setMyCommands(publicCommands, {
+            scope: { type: 'default' }
+        });
+
+        // Set admin + public commands (for group admins)
+        await bot.setMyCommands([...publicCommands, ...adminOnlyCommands], {
+            scope: { type: 'all_chat_administrators' }
+        });
+
+        logger.info('✅ Bot commands registered successfully.');
+    } catch (err) {
+        logger.error('❌ Failed to register bot commands:', err);
+    }
+};
+
+/**
  * The main asynchronous function that starts the bot.
  */
 const main = async () => {
@@ -20,10 +57,13 @@ const main = async () => {
     await db.initDb();
     logger.info('Database initialized.');
 
-    // Get the bot's own user object to identify when it's added/removed from groups.
+    // 2. Get the bot's identity
     const botUser = await bot.getMe();
 
-    // 2. Register listeners for group membership changes.
+    // 3. Register slash commands
+    await registerBotCommands();
+
+    // 4. Group join/leave events
     bot.on('new_chat_members', (msg) => {
         if (msg.new_chat_members.some(member => member.id === botUser.id)) {
             logger.info(`Bot added to new group: "${msg.chat.title}" (${msg.chat.id})`);
@@ -38,12 +78,9 @@ const main = async () => {
         }
     });
 
-    // 3. Register a listener for all incoming text messages and commands.
+    // 5. Handle messages
     bot.on('message', (msg) => {
-        // We only process messages with text.
-        // The membership changes are handled by dedicated events now.
         if (!msg.text) return;
-
         if (msg.text.startsWith('/')) {
             handleCommand(msg);
         } else {
@@ -51,10 +88,10 @@ const main = async () => {
         }
     });
 
-    // 4. Register a listener for callback queries from inline keyboards.
+    // 6. Handle inline keyboard callbacks
     bot.on('callback_query', handleCallback);
 
-    // 5. Set up a listener for polling errors to prevent the bot from crashing silently.
+    // 7. Handle polling errors
     bot.on('polling_error', (error) => {
         logger.error(`Polling error: ${error.code} - ${error.message}`);
     });
@@ -63,8 +100,8 @@ const main = async () => {
     logger.info(`Super Admin User ID: ${process.env.ADMIN_USER_ID}`);
 };
 
-// Execute the main function and handle any fatal startup errors.
+// Execute the main function and handle fatal startup errors
 main().catch(err => {
     logger.error('Failed to start bot:', err);
-    process.exit(1); // Exit the process with an error code.
+    process.exit(1);
 });
