@@ -3,12 +3,12 @@
  * It initializes services, and sets up event listeners for multi-tenant operation.
  */
 
-import bot from './services/telegram.js';
-import * as db from './services/database.js';
+import bot from '../common/services/telegram.js';
+import * as db from '../common/services/database.js';
 import { handleMessage } from './handlers/messageHandler.js';
 import { handleCommand } from './handlers/commandHandler.js';
 import { handleCallback } from './handlers/callbackHandler.js';
-import logger from './services/logger.js';
+import logger from '../common/services/logger.js';
 
 /**
  * Registers Telegram slash commands with appropriate scopes.
@@ -54,7 +54,7 @@ const main = async () => {
     logger.info('Starting bot...');
 
     // 1. Initialize the database connection and ensure tables are created.
-    await db.initDb();
+    await db.initializeDatabase();
     logger.info('Database initialized.');
 
     // 2. Get the bot's identity

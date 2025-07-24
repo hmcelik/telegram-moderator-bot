@@ -4,8 +4,8 @@
  * on a per-group basis.
  */
 
-import logger from '../services/logger.js';
-import * as telegram from '../services/telegram.js';
+import logger from '../../common/services/logger.js';
+import * as telegram from '../../common/services/telegram.js';
 import { mainKeyboard } from '../keyboards/mainMenu.js';
 import { aiSensitivityKeyboard } from '../keyboards/aiSensitivityMenu.js';
 import { penaltyLevelsKeyboard } from '../keyboards/penaltyLevelsMenu.js';
@@ -13,9 +13,9 @@ import { miscKeyboard } from '../keyboards/miscMenu.js';
 import { whitelistKeyboard } from '../keyboards/whitelistMenu.js';
 import { keywordMenuKeyboard } from '../keyboards/keywordMenu.js';
 import { moderatorMenuKeyboard } from '../keyboards/moderatorMenu.js';
-import { updateSetting, getGroupSettings } from '../config/index.js';
-import * as db from '../services/database.js';
-import bot from '../services/telegram.js';
+import { updateSetting, getGroupSettings } from '../../common/config/index.js';
+import * as db from '../../common/services/database.js';
+import bot from '../../common/services/telegram.js';
 import { escapeMarkdownV2 } from './commandHandler.js';
 
 // A simple in-memory store for tracking pending admin actions (e.g., waiting for text input).

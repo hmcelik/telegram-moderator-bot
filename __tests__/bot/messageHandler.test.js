@@ -1,17 +1,17 @@
 // __tests__/messageHandler.test.js
 
 import { describe, test, expect, vi, beforeEach } from 'vitest';
-import { handleMessage } from '../src/handlers/messageHandler.js';
-import * as nlp from '../src/services/nlp.js';
-import * as db from '../src/services/database.js';
-import * as telegram from '../src/services/telegram.js';
-import { getGroupSettings } from '../src/config/index.js';
+import { handleMessage } from '../../src/bot/handlers/messageHandler.js';
+import * as nlp from '../../src/common/services/nlp.js';
+import * as db from '../../src/common/services/database.js';
+import * as telegram from '../../src/common/services/telegram.js';
+import { getGroupSettings } from '../../src/common/config/index.js';
 
 // Mock the modules using Vitest's API
-vi.mock('../src/services/nlp.js');
-vi.mock('../src/services/database.js');
-vi.mock('../src/services/telegram.js');
-vi.mock('../src/config/index.js');
+vi.mock('../../src/common/services/nlp.js');
+vi.mock('../../src/common/services/database.js');
+vi.mock('../../src/common/services/telegram.js');
+vi.mock('../../src/common/config/index.js');
 
 describe('Message Handler', () => {
     const mockMsg = {

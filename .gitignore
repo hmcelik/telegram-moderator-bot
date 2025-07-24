@@ -39,3 +39,5 @@ coverage/
 #Ignore database files
 *.sqlite
 *.db
+*.db-shm
+*.db-wal

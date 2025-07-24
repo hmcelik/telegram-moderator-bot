@@ -3,10 +3,10 @@
  * Manages the initial interaction for bot configuration.
  */
 
-import { sendMessage, getChatAdmins, deleteMessage, getChatMember, sendDocument } from '../services/telegram.js';
-import * as db from '../services/database.js';
-import { getGroupSettings } from '../config/index.js';
-import logger from '../services/logger.js';
+import { sendMessage, getChatAdmins, deleteMessage, getChatMember, sendDocument } from '../../common/services/telegram.js';
+import * as db from '../../common/services/database.js';
+import { getGroupSettings } from '../../common/config/index.js';
+import logger from '../../common/services/logger.js';
 import { mainKeyboard } from '../keyboards/mainMenu.js';
 import { setActiveMenu } from './callbackHandler.js';
 import { Buffer } from 'buffer';

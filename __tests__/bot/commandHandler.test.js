@@ -1,10 +1,10 @@
 // __tests__/commandHandler.test.js
 
 import { describe, test, expect, vi, beforeEach } from 'vitest';
-import { handleCommand } from '../src/handlers/commandHandler.js';
+import { handleCommand } from '../../src/bot/handlers/commandHandler.js';
 
 // Mock all dependencies
-vi.mock('../src/services/telegram.js', () => ({
+vi.mock('../../src/common/services/telegram.js', () => ({
   default: { on: vi.fn() },
   sendMessage: vi.fn().mockResolvedValue({ message_id: 'temp_msg_id' }),
   getChatAdmins: vi.fn(),
@@ -12,7 +12,7 @@ vi.mock('../src/services/telegram.js', () => ({
   getChatMember: vi.fn(),
 }));
 
-vi.mock('../src/services/database.js', () => ({
+vi.mock('../../src/common/services/database.js', () => ({
   upsertUser: vi.fn(),
   findUserByUsernameInDb: vi.fn(),
   getStrikes: vi.fn(),
@@ -27,13 +27,13 @@ vi.mock('../src/services/database.js', () => ({
   getAllGroups: vi.fn(),
 }));
 
-vi.mock('../src/config/index.js', () => ({
+vi.mock('../../src/common/config/index.js', () => ({
   getGroupSettings: vi.fn(),
 }));
 
 // Import mocks for easy reference
-import * as telegram from '../src/services/telegram.js';
-import * as db from '../src/services/database.js';
+import * as telegram from '../../src/common/services/telegram.js';
+import * as db from '../../src/common/services/database.js';
 
 describe('Command Handler', () => {
     // Mock Data

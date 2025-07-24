@@ -4,11 +4,11 @@
  * and applies penalties based on the configured rules for each specific group.
  */
 
-import { isPromotional } from '../services/nlp.js';
-import * as db from '../services/database.js';
-import { deleteMessage, kickUser, banUser, muteUser, sendMessage, getChatAdmins } from '../services/telegram.js';
-import { getGroupSettings } from '../config/index.js';
-import logger from '../services/logger.js';
+import { isPromotional } from '../../common/services/nlp.js';
+import * as db from '../../common/services/database.js';
+import { deleteMessage, kickUser, banUser, muteUser, sendMessage, getChatAdmins } from '../../common/services/telegram.js';
+import { getGroupSettings } from '../../common/config/index.js';
+import logger from '../../common/services/logger.js';
 // Removed the obsolete userCache import
 
 /**

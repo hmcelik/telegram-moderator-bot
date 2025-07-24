@@ -1,14 +1,14 @@
 import { vi, describe, it, expect, beforeEach } from 'vitest';
-import { handleCallback } from '../src/handlers/callbackHandler'; // Adjust path as needed
-import * as db from '../src/services/database';
-import * as telegram from '../src/services/telegram';
-import * as config from '../src/config/index';
+import { handleCallback } from '../../src/bot/handlers/callbackHandler'; // Adjust path as needed
+import * as db from '../../src/common/services/database';
+import * as telegram from '../../src/common/services/telegram';
+import * as config from '../../src/common/config/index';
 
 // Mock all dependencies
-vi.mock('../src/services/database');
-vi.mock('../src/services/telegram');
-vi.mock('../src/config/index');
-vi.mock('../src/services/logger', () => ({
+vi.mock('../../src/common/services/database');
+vi.mock('../../src/common/services/telegram');
+vi.mock('../../src/common/config/index');
+vi.mock('../../src/common/services/logger', () => ({
   default: {
     info: vi.fn(),
     warn: vi.fn(),
@@ -17,9 +17,9 @@ vi.mock('../src/services/logger', () => ({
 }));
 
 // Mock keyboards to prevent UI rendering logic from interfering with tests
-vi.mock('../src/keyboards/mainMenu.js', () => ({ mainKeyboard: vi.fn(() => ({})) }));
-vi.mock('../src/keyboards/penaltyLevelsMenu.js', () => ({ penaltyLevelsKeyboard: vi.fn(() => ({})) }));
-vi.mock('../src/keyboards/aiSensitivityMenu.js', () => ({ aiSensitivityKeyboard: vi.fn(() => ({})) }));
+vi.mock('../../src/bot/keyboards/mainMenu.js', () => ({ mainKeyboard: vi.fn(() => ({})) }));
+vi.mock('../../src/bot/keyboards/penaltyLevelsMenu.js', () => ({ penaltyLevelsKeyboard: vi.fn(() => ({})) }));
+vi.mock('../../src/bot/keyboards/aiSensitivityMenu.js', () => ({ aiSensitivityKeyboard: vi.fn(() => ({})) }));
 
 describe('callbackHandler', () => {
   const MOCK_USER_ID = 12345;

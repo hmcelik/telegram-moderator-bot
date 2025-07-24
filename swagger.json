@@ -1,0 +1,134 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Aegis Bot API",
+    "version": "1.0.0",
+    "description": "REST API for the Aegis AI Moderation Bot"
+  },
+  "servers": [
+    {
+      "url": "/api/v1"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    },
+    "schemas": {
+      "GroupSettings": {
+        "type": "object",
+        "properties": {
+          "alertLevel": { "type": "integer", "default": 1, "description": "Strikes for an AI-detected violation." },
+          "muteLevel": { "type": "integer", "default": 2, "description": "Strikes required to mute a user." },
+          "kickLevel": { "type": "integer", "default": 3, "description": "Strikes required to kick a user." },
+          "banLevel": { "type": "integer", "default": 0, "description": "Strikes required to ban a user (0 means disabled)." },
+          "spamThreshold": { "type": "number", "format": "float", "default": 0.85, "description": "AI confidence level to trigger a violation." }
+        }
+      }
+    }
+  },
+  "paths": {
+    "/auth/verify": {
+      "post": {
+        "summary": "Verify Telegram Login and Get JWT",
+        "tags": ["Authentication"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "id": { "type": "integer", "example": 123456789 },
+                  "first_name": { "type": "string", "example": "John" },
+                  "username": { "type": "string", "example": "johndoe" },
+                  "photo_url": { "type": "string", "example": "https://t.me/i/userpic/320/johndoe.jpg" },
+                  "auth_date": { "type": "integer", "example": 1678886400 },
+                  "hash": { "type": "string", "example": "..." }
+                },
+                "required": ["id", "auth_date", "hash"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Success", "content": { "application/json": { "schema": { "type": "object", "properties": { "token": { "type": "string" } } } } } },
+          "400": { "description": "Hash is missing" },
+          "401": { "description": "Invalid Telegram data" }
+        }
+      }
+    },
+    "/groups": {
+      "get": {
+        "summary": "List groups the user is an admin of",
+        "tags": ["Groups"],
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "A list of groups where the authenticated user is an admin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "chatId": { "type": "string", "example": "-100123456789" },
+                      "chatTitle": { "type": "string", "example": "Aegis Bot Support" }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/groups/{groupId}/settings": {
+      "get": {
+        "summary": "Get group settings",
+        "tags": ["Groups"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "in": "path", "name": "groupId", "required": true, "schema": { "type": "string" }, "description": "The unique ID of the Telegram group." }
+        ],
+        "responses": { 
+            "200": { "description": "Group settings object", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/GroupSettings" } } } },
+            "403": { "description": "User is not an admin of this group." },
+            "404": { "description": "Group not found." }
+        }
+      },
+      "put": {
+        "summary": "Update group settings",
+        "tags": ["Groups"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "in": "path", "name": "groupId", "required": true, "schema": { "type": "string" }, "description": "The unique ID of the Telegram group." }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": { 
+              "application/json": { 
+                  "schema": { 
+                      "type": "object",
+                      "properties": {
+                          "settings": {
+                              "$ref": "#/components/schemas/GroupSettings"
+                          }
+                      }
+                  } 
+              } 
+          }
+        },
+        "responses": { 
+            "200": { "description": "Settings updated successfully." },
+            "403": { "description": "User is not an admin of this group." }
+        }
+      }
+    }
+  }
+}
