@@ -10,7 +10,7 @@ import config from '../config/index.js';
 import logger from './logger.js';
 
 // Initialize the bot with the token from the configuration.
-const bot = new TelegramBot(config.telegram.token, { polling: true });
+const bot = new TelegramBot(config.telegram.token);
 
 /**
  * A simple promise-based delay helper.

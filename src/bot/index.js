@@ -98,6 +98,10 @@ const main = async () => {
 
     logger.info(`🚀 Bot "${botUser.first_name}" is running! Watching for messages...`);
     logger.info(`Super Admin User ID: ${process.env.ADMIN_USER_ID}`);
+
+    bot.startPolling();
+    
+    logger.info('Bot is now polling for updates.');
 };
 
 // Execute the main function and handle fatal startup errors

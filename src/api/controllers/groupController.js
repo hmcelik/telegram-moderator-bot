@@ -1,6 +1,7 @@
+import { validationResult } from 'express-validator';
 import * as db from '../../common/services/database.js';
 import { getGroupSettings, updateSetting } from '../../common/config/index.js';
-import { getChatMember, getChatAdmins } from '../../common/services/telegram.js';
+import { getChatAdmins } from '../../common/services/telegram.js';
 import ApiError from '../utils/apiError.js';
 
 export const listGroups = async (req, res, next) => {
@@ -16,9 +17,10 @@ export const listGroups = async (req, res, next) => {
                     userAdminGroups.push(group);
                 }
             } catch (err) {
-                // Ignore groups where the bot might not have admin rights to fetch admins
+                // Skip groups where admin info is unavailable
             }
         }
+
         res.status(200).json(userAdminGroups);
     } catch (error) {
         next(error);
@@ -27,6 +29,11 @@ export const listGroups = async (req, res, next) => {
 
 export const getSettings = async (req, res, next) => {
     try {
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) {
+            return res.status(400).json({ errors: errors.array() });
+        }
+
         const { groupId } = req.params;
         const settings = await getGroupSettings(groupId);
         res.status(200).json(settings);
@@ -37,9 +44,14 @@ export const getSettings = async (req, res, next) => {
 
 export const updateSettings = async (req, res, next) => {
     try {
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) {
+            return res.status(400).json({ errors: errors.array() });
+        }
+
         const { groupId } = req.params;
         const { settings } = req.body;
-        
+
         for (const key in settings) {
             await updateSetting(groupId, key, settings[key]);
         }
@@ -56,18 +68,22 @@ export const updateSettings = async (req, res, next) => {
 
 export const getStats = async (req, res, next) => {
     try {
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) {
+            return res.status(400).json({ errors: errors.array() });
+        }
+
         const { groupId } = req.params;
         const group = await db.getGroup(groupId);
         if (!group) {
             throw new ApiError(404, 'Group not found');
         }
-        
+
         const deletionsToday = await db.getTotalDeletionsToday(groupId);
-        // This can be expanded to include more stats from the audit_log
-        const auditLog = await db.getAuditLog(groupId, 100); 
+        const auditLog = await db.getAuditLog(groupId, 100);
 
         res.status(200).json({
-            totalMessagesProcessed: auditLog.length, // Placeholder, needs better logic
+            totalMessagesProcessed: auditLog.length,
             violationsDetected: auditLog.length,
             actionsTaken: auditLog.length,
             deletionsToday

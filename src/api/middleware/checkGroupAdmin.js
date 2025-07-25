@@ -1,5 +1,9 @@
-import { getChatAdmins } from '../../common/services/telegram.js';
+import axios from 'axios';
+import config from '../../common/config/index.js';
 import ApiError from '../utils/apiError.js';
+
+// Construct the base Telegram API URL from your configuration
+const TELEGRAM_API_URL = `https://api.telegram.org/bot${config.telegram.token}`;
 
 export const checkGroupAdmin = async (req, res, next) => {
     try {
@@ -10,18 +14,36 @@ export const checkGroupAdmin = async (req, res, next) => {
             return next(new ApiError(400, 'Group ID is required.'));
         }
 
-        const adminIds = await getChatAdmins(groupId);
-        
+        // Make a direct API call to Telegram
+        const response = await axios.post(`${TELEGRAM_API_URL}/getChatAdministrators`, {
+            chat_id: groupId,
+        });
+
+        // The list of admins is in response.data.result
+        const admins = response.data.result;
+        if (!admins) {
+            return next(new ApiError(403, 'Could not retrieve admins for this group.'));
+        }
+
+        // Extract just the user IDs from the admin list
+        const adminIds = admins.map(admin => admin.user.id);
+
         if (adminIds.includes(userId)) {
+            // User is an admin, proceed to the next handler
             return next();
         } else {
+            // User is not an admin
             return next(new ApiError(403, 'Forbidden. You are not an administrator of this group.'));
         }
     } catch (error) {
-        // Handle cases where the bot can't fetch admins (e.g., not in group)
-        if (error.response && error.response.statusCode === 403) {
-             return next(new ApiError(403, 'Forbidden. Bot is not an administrator in the target group.'));
+        // This block catches errors from the axios request
+        if (error.response && (error.response.status === 403 || error.response.status === 400)) {
+            console.error('Telegram API error:', error.response.data?.description);
+            return next(new ApiError(403, 'Forbidden. The bot may not be an administrator in the target group.'));
         }
+        
+        // For other errors (e.g., network issues, server errors)
+        console.error('Failed to verify admin status:', error.message);
         next(new ApiError(500, 'Failed to verify admin status.'));
     }
 };

@@ -1,94 +1,81 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { vi, describe, it, expect, beforeEach } from 'vitest';
 import request from 'supertest';
-import express from 'express';
-import jwt from 'jsonwebtoken';
+import axios from 'axios';
+import querystring from 'node:querystring';
+import app from '../../src/api/server.js';
+import * as tokenService from '../../src/api/services/tokenService.js';
+import * as telegramService from '../../src/common/services/telegram.js';
 
-// Import your actual routes and error handlers
-import groupRoutes from '../../src/api/routes/groups.js';
-import errorResponder from '../../src/api/utils/errorResponder.js';
-import * as db from '../../src/common/services/database.js';
-import * as telegram from '../../src/common/services/telegram.js';
+// --- MOCK SETUP ---
+vi.mock('axios');
 
-// Mock middleware and services
-vi.mock('../../src/common/services/database.js');
-vi.mock('../../src/common/services/telegram.js');
+vi.mock('../../src/common/config/index.js', () => ({
+  getGroupSettings: vi.fn(),
+  updateSetting: vi.fn(),
+  default: {
+    getAllGroups: vi.fn(),
+    telegram: {
+      token: 'mock-telegram-token',
+    },
+  },
+}));
 
-const app = express();
-app.use(express.json());
-app.use('/api/v1/groups', groupRoutes);
-app.use(errorResponder);
+vi.mock('../../src/common/services/database.js', () => ({
+  getGroup: vi.fn().mockResolvedValue({ chatId: '-1001' }),
+  getAuditLog: vi.fn().mockResolvedValue(new Array(5).fill({})),
+  getTotalDeletionsToday: vi.fn().mockResolvedValue(3),
+  getAllGroups: vi.fn().mockResolvedValue([
+    { chatId: '-1001', chatTitle: 'Group A' },
+    { chatId: '-1002', chatTitle: 'Group B' }
+  ]),
+}));
 
-// Generate a valid token for an admin user and a non-admin user
-const ADMIN_ID = '12345';
-const NON_ADMIN_ID = '67890';
-const JWT_SECRET = process.env.JWT_SECRET || 'test-secret';
-
-const adminToken = jwt.sign({ id: ADMIN_ID }, JWT_SECRET);
-const nonAdminToken = jwt.sign({ id: NON_ADMIN_ID }, JWT_SECRET);
+vi.mock('../../src/common/services/telegram.js', () => ({
+  getChatAdmins: vi.fn(),
+}));
 
 describe('Group API Endpoints', () => {
+  let configService;
+  let adminToken;
 
-  beforeEach(() => {
+  beforeEach(async () => {
+    configService = await import('../../src/common/config/index.js');
     vi.clearAllMocks();
+    adminToken = tokenService.generateToken({ id: 123 });
   });
 
-  describe('GET /groups', () => {
-    it('should return a list of groups the user is an admin of', async () => {
-      // Mock DB to return two groups
-      db.getAllGroups.mockResolvedValue([
-        { chatId: '-1001', chatTitle: 'Admin Group' },
-        { chatId: '-1002', chatTitle: 'Non-Admin Group' }
-      ]);
-      // Mock Telegram to confirm user is admin of the first group only
-      telegram.getChatAdmins.mockImplementation(chatId => {
-        if (chatId === '-1001') return Promise.resolve([ADMIN_ID]);
-        return Promise.resolve(['99999']); // Different admin
-      });
-
-      const response = await request(app)
-        .get('/api/v1/groups')
-        .set('Authorization', `Bearer ${adminToken}`);
-
-      expect(response.status).toBe(200);
-      expect(response.body).toBeInstanceOf(Array);
-      expect(response.body.length).toBe(1);
-      expect(response.body[0].chatTitle).toBe('Admin Group');
-    });
-  });
-
-  describe('GET /groups/:groupId/settings', () => {
+  describe('Settings Endpoints', () => {
     it('should return 401 if no token is provided', async () => {
       const response = await request(app).get('/api/v1/groups/-1001/settings');
       expect(response.status).toBe(401);
     });
 
     it('should return settings for an admin', async () => {
-      telegram.getChatAdmins.mockResolvedValue([ADMIN_ID]);
-      db.getSetting.mockResolvedValue('some_value'); // Mocking getSetting
+      axios.post.mockResolvedValue({ data: { result: [{ user: { id: 123 } }] } });
+      configService.getGroupSettings.mockResolvedValue({ muteLevel: 3 });
 
       const response = await request(app)
         .get('/api/v1/groups/-1001/settings')
         .set('Authorization', `Bearer ${adminToken}`);
-      
+
       expect(response.status).toBe(200);
-      expect(response.body).toBeDefined();
+      expect(response.body).toEqual({ muteLevel: 3 });
     });
 
-    it('should return 403 for a non-admin', async () => {
-      telegram.getChatAdmins.mockResolvedValue([ADMIN_ID]); // only admin is 12345
+    it('should return 403 if user is not an admin of the group', async () => {
+      axios.post.mockResolvedValue({ data: { result: [{ user: { id: 999 } }] } });
 
       const response = await request(app)
         .get('/api/v1/groups/-1001/settings')
-        .set('Authorization', `Bearer ${nonAdminToken}`); // User 67890 tries to access
+        .set('Authorization', `Bearer ${adminToken}`);
 
       expect(response.status).toBe(403);
     });
-  });
 
-  describe('PUT /groups/:groupId/settings', () => {
     it('should allow an admin to update settings', async () => {
-      telegram.getChatAdmins.mockResolvedValue([ADMIN_ID]);
-      db.setSetting.mockResolvedValue();
+      axios.post.mockResolvedValue({ data: { result: [{ user: { id: 123 } }] } });
+      configService.updateSetting.mockResolvedValue({ success: true });
+      configService.getGroupSettings.mockResolvedValue({ kickLevel: 5 });
 
       const newSettings = { kickLevel: 5 };
 
@@ -98,7 +85,87 @@ describe('Group API Endpoints', () => {
         .send({ settings: newSettings });
 
       expect(response.status).toBe(200);
-      expect(db.setSetting).toHaveBeenCalledWith('-1001', 'kickLevel', 5);
+      expect(configService.updateSetting).toHaveBeenCalledWith('-1001', 'kickLevel', 5);
+    });
+
+    it('should update multiple settings individually', async () => {
+      axios.post.mockResolvedValue({ data: { result: [{ user: { id: 123 } }] } });
+      configService.updateSetting.mockResolvedValue();
+      configService.getGroupSettings.mockResolvedValue({ kickLevel: 3, muteLevel: 1 });
+
+      const response = await request(app)
+        .put('/api/v1/groups/-1001/settings')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ settings: { kickLevel: 3, muteLevel: 1 } });
+
+      expect(response.status).toBe(200);
+      expect(configService.updateSetting).toHaveBeenCalledTimes(2);
+    });
+
+    it('should return 403 for non-admin users', async () => {
+      axios.post.mockResolvedValue({ data: { result: [{ user: { id: 999 } }] } });
+
+      const response = await request(app)
+        .put('/api/v1/groups/-1001/settings')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ settings: { kickLevel: 1 } });
+
+      expect(response.status).toBe(403);
+    });
+
+    it('should return 400 for invalid settings object', async () => {
+      axios.post.mockResolvedValue({ data: { result: [{ user: { id: 123 } }] } });
+
+      const response = await request(app)
+        .put('/api/v1/groups/-1001/settings')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ settings: null });
+
+      expect(response.status).toBe(400);
+    });
+  });
+
+  describe('GET /groups', () => {
+    it('should return only groups the user is admin of', async () => {
+      // Mock getChatAdmins to return user ID 123 for group -1001 only
+      telegramService.getChatAdmins.mockImplementation(async (chatId) => {
+        console.log('Mock getChatAdmins called with chatId:', chatId);
+        if (chatId === '-1001') {
+          return [123]; // User IS admin of -1001
+        } else if (chatId === '-1002') {
+          return [999]; // User is NOT admin of -1002
+        }
+        return [];
+      });
+
+      const response = await request(app)
+        .get('/api/v1/groups')
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      console.log('Actual response:', response.body);
+
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual([
+        { chatId: '-1001', chatTitle: 'Group A' }
+      ]);
+    });
+  });
+
+  describe('GET /groups/:groupId/stats', () => {
+    it('should return stats for a valid group', async () => {
+      axios.post.mockResolvedValue({ data: { result: [{ user: { id: 123 } }] } });
+
+      const response = await request(app)
+        .get('/api/v1/groups/-1001/stats')
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual(expect.objectContaining({
+        totalMessagesProcessed: 5,
+        violationsDetected: 5,
+        actionsTaken: 5,
+        deletionsToday: 3
+      }));
     });
   });
 });
