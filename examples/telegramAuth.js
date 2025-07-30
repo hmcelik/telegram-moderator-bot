@@ -27,19 +27,19 @@ class TelegramAuth {
     const tg = window.Telegram.WebApp;
     tg.ready();
 
-    // Method 1: Use raw initData (Recommended)
+    // Use Telegram WebApp initData for authentication
     try {
       const initData = tg.initData;
       if (!initData) {
         throw new Error('No initData available from Telegram');
       }
 
-      const response = await fetch(`${this.apiBaseUrl}/auth/verify`, {
+      const response = await fetch(`${this.apiBaseUrl}/webapp/auth`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ initData })
+          'X-Telegram-Init-Data': initData
+        }
       });
 
       if (!response.ok) {
@@ -78,19 +78,14 @@ class TelegramAuth {
     }
 
     try {
-      const response = await fetch(`${this.apiBaseUrl}/auth/verify`, {
+      // For WebApp API, we should use the raw initData instead
+      const initData = tg.initData;
+      const response = await fetch(`${this.apiBaseUrl}/webapp/auth`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          id: initDataUnsafe.user.id,
-          first_name: initDataUnsafe.user.first_name,
-          username: initDataUnsafe.user.username,
-          photo_url: initDataUnsafe.user.photo_url,
-          auth_date: initDataUnsafe.auth_date,
-          hash: initDataUnsafe.hash
-        })
+          'X-Telegram-Init-Data': initData
+        }
       });
 
       if (!response.ok) {
@@ -114,15 +109,19 @@ class TelegramAuth {
 
   /**
    * Authenticate using Login Widget data (for external apps)
+   * Note: External website authentication uses mock data for testing
    */
   async authenticateWithLoginWidget(userData) {
     try {
-      const response = await fetch(`${this.apiBaseUrl}/auth/verify`, {
+      // For external websites, we need to create mock initData
+      const mockInitData = `user=${encodeURIComponent(JSON.stringify(userData))}&auth_date=${Math.floor(Date.now() / 1000)}&hash=mock_hash_for_testing`;
+      
+      const response = await fetch(`${this.apiBaseUrl}/webapp/auth`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(userData)
+          'X-Telegram-Init-Data': mockInitData
+        }
       });
 
       if (!response.ok) {
@@ -217,21 +216,28 @@ class TelegramAuth {
    * Get user's groups
    */
   async getGroups() {
-    return this.apiRequest('/groups');
+    return this.apiRequest('/webapp/user/groups');
+  }
+
+  /**
+   * Get user profile
+   */
+  async getUserProfile() {
+    return this.apiRequest('/webapp/user/profile');
   }
 
   /**
    * Get group settings
    */
   async getGroupSettings(groupId) {
-    return this.apiRequest(`/groups/${groupId}/settings`);
+    return this.apiRequest(`/webapp/group/${groupId}/settings`);
   }
 
   /**
    * Update group settings
    */
   async updateGroupSettings(groupId, settings) {
-    return this.apiRequest(`/groups/${groupId}/settings`, {
+    return this.apiRequest(`/webapp/group/${groupId}/settings`, {
       method: 'PUT',
       body: JSON.stringify({ settings })
     });
@@ -240,8 +246,9 @@ class TelegramAuth {
   /**
    * Get group statistics
    */
-  async getGroupStats(groupId) {
-    return this.apiRequest(`/groups/${groupId}/stats`);
+  async getGroupStats(groupId, period = null) {
+    const url = period ? `/webapp/group/${groupId}/stats?period=${period}` : `/webapp/group/${groupId}/stats`;
+    return this.apiRequest(url);
   }
 
   /**

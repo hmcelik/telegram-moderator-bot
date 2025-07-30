@@ -269,3 +269,141 @@ export const recalculateStrikes = async (chatId, userId) => {
         await getDb().run('DELETE FROM strikes WHERE chatId = ? AND userId = ? AND timestamp < ?', chatId, userId, expirationDate.toISOString());
     }
 };
+
+// --- WebApp Additional Functions ---
+
+export const getUser = (userId) => {
+    return getDb().get('SELECT * FROM users WHERE userId = ?', userId.toString());
+};
+
+export const getUserAdminGroups = async (userId) => {
+    // This would typically require checking with Telegram API
+    // For now, return groups where user has been active as admin
+    return getDb().all(`
+        SELECT DISTINCT g.* 
+        FROM groups g 
+        INNER JOIN audit_log a ON g.chatId = a.chatId 
+        WHERE a.userId = ? 
+        ORDER BY g.chatTitle
+    `, userId.toString());
+};
+
+export const isUserGroupAdmin = async (userId, groupId) => {
+    // Check if user has admin activity in this group
+    // In a real implementation, you'd verify with Telegram API
+    const activity = await getDb().get(`
+        SELECT COUNT(*) as count 
+        FROM audit_log 
+        WHERE userId = ? AND chatId = ?
+    `, userId.toString(), groupId);
+    
+    return activity && activity.count > 0;
+};
+
+export const setWhitelistKeywords = async (chatId, keywords) => {
+    const dbInstance = getDb();
+    await dbInstance.run('BEGIN TRANSACTION');
+    try {
+        // Clear existing keywords
+        await dbInstance.run('DELETE FROM keyword_whitelist WHERE chatId = ?', chatId);
+        
+        // Add new keywords
+        for (const keyword of keywords) {
+            await dbInstance.run('INSERT INTO keyword_whitelist (chatId, keyword) VALUES (?, ?)', chatId, keyword);
+        }
+        
+        await dbInstance.run('COMMIT');
+    } catch (error) {
+        await dbInstance.run('ROLLBACK');
+        logger.error('Failed to set whitelist keywords:', error);
+        throw error;
+    }
+};
+
+export const getGroupStats = async (groupId, startDate, endDate) => {
+    const dbInstance = getDb();
+    
+    try {
+        // Get basic statistics
+        const totalMessages = await dbInstance.get(`
+            SELECT COUNT(*) as count 
+            FROM audit_log 
+            WHERE chatId = ? AND timestamp BETWEEN ? AND ?
+        `, groupId, startDate.toISOString(), endDate.toISOString());
+
+        const flaggedMessages = await dbInstance.get(`
+            SELECT COUNT(*) as count 
+            FROM audit_log 
+            WHERE chatId = ? AND timestamp BETWEEN ? AND ? 
+            AND JSON_EXTRACT(logData, '$.action') IN ('flagged', 'deleted')
+        `, groupId, startDate.toISOString(), endDate.toISOString());
+
+        const deletedMessages = await dbInstance.get(`
+            SELECT COUNT(*) as count 
+            FROM audit_log 
+            WHERE chatId = ? AND timestamp BETWEEN ? AND ? 
+            AND JSON_EXTRACT(logData, '$.action') = 'deleted'
+        `, groupId, startDate.toISOString(), endDate.toISOString());
+
+        const mutedUsers = await dbInstance.get(`
+            SELECT COUNT(DISTINCT userId) as count 
+            FROM audit_log 
+            WHERE chatId = ? AND timestamp BETWEEN ? AND ? 
+            AND JSON_EXTRACT(logData, '$.action') = 'muted'
+        `, groupId, startDate.toISOString(), endDate.toISOString());
+
+        const kickedUsers = await dbInstance.get(`
+            SELECT COUNT(DISTINCT userId) as count 
+            FROM audit_log 
+            WHERE chatId = ? AND timestamp BETWEEN ? AND ? 
+            AND JSON_EXTRACT(logData, '$.action') = 'kicked'
+        `, groupId, startDate.toISOString(), endDate.toISOString());
+
+        const bannedUsers = await dbInstance.get(`
+            SELECT COUNT(DISTINCT userId) as count 
+            FROM audit_log 
+            WHERE chatId = ? AND timestamp BETWEEN ? AND ? 
+            AND JSON_EXTRACT(logData, '$.action') = 'banned'
+        `, groupId, startDate.toISOString(), endDate.toISOString());
+
+        // Get average spam score
+        const spamScores = await dbInstance.all(`
+            SELECT JSON_EXTRACT(logData, '$.spamScore') as score 
+            FROM audit_log 
+            WHERE chatId = ? AND timestamp BETWEEN ? AND ? 
+            AND JSON_EXTRACT(logData, '$.spamScore') IS NOT NULL
+        `, groupId, startDate.toISOString(), endDate.toISOString());
+
+        const avgSpamScore = spamScores.length > 0 
+            ? spamScores.reduce((sum, row) => sum + parseFloat(row.score || 0), 0) / spamScores.length 
+            : 0;
+
+        // Get top violation types
+        const violationTypes = await dbInstance.all(`
+            SELECT JSON_EXTRACT(logData, '$.violationType') as type, COUNT(*) as count 
+            FROM audit_log 
+            WHERE chatId = ? AND timestamp BETWEEN ? AND ? 
+            AND JSON_EXTRACT(logData, '$.violationType') IS NOT NULL 
+            GROUP BY JSON_EXTRACT(logData, '$.violationType') 
+            ORDER BY count DESC 
+            LIMIT 5
+        `, groupId, startDate.toISOString(), endDate.toISOString());
+
+        return {
+            totalMessages: totalMessages?.count || 0,
+            flaggedMessages: flaggedMessages?.count || 0,
+            deletedMessages: deletedMessages?.count || 0,
+            mutedUsers: mutedUsers?.count || 0,
+            kickedUsers: kickedUsers?.count || 0,
+            bannedUsers: bannedUsers?.count || 0,
+            averageSpamScore: Math.round(avgSpamScore * 100) / 100,
+            topViolationTypes: violationTypes.map(row => ({
+                type: row.type,
+                count: row.count
+            }))
+        };
+    } catch (error) {
+        logger.error('Error getting group stats:', error);
+        throw error;
+    }
+};

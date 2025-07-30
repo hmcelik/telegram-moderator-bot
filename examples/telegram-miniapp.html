@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Moderator Bot - Mini App</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--tg-theme-bg-color, #ffffff);
+            color: var(--tg-theme-text-color, #000000);
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 400px;
+            margin: 0 auto;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .header h1 {
+            color: var(--tg-theme-text-color, #000000);
+            margin-bottom: 10px;
+        }
+        
+        .status {
+            padding: 10px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        
+        .status.loading {
+            background-color: var(--tg-theme-hint-color, #999999);
+            color: white;
+        }
+        
+        .status.success {
+            background-color: #4CAF50;
+            color: white;
+        }
+        
+        .status.error {
+            background-color: #f44336;
+            color: white;
+        }
+        
+        .user-info {
+            background-color: var(--tg-theme-secondary-bg-color, #f1f1f1);
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        
+        .groups-list {
+            margin-top: 20px;
+        }
+        
+        .group-item {
+            background-color: var(--tg-theme-secondary-bg-color, #f1f1f1);
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        
+        .group-item:hover {
+            background-color: var(--tg-theme-button-color, #007bff);
+            color: var(--tg-theme-button-text-color, #ffffff);
+        }
+        
+        .btn {
+            background-color: var(--tg-theme-button-color, #007bff);
+            color: var(--tg-theme-button-text-color, #ffffff);
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            width: 100%;
+            margin: 10px 0;
+            font-size: 16px;
+        }
+        
+        .btn:hover {
+            opacity: 0.8;
+        }
+        
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🤖 Moderator Bot</h1>
+            <p>Manage your group settings</p>
+        </div>
+        
+        <div id="status" class="status loading">
+            Initializing...
+        </div>
+        
+        <div id="user-info" class="user-info hidden">
+            <h3>Welcome, <span id="user-name"></span>!</h3>
+            <p>User ID: <span id="user-id"></span></p>
+            <p>Admin Groups: <span id="groups-count"></span></p>
+        </div>
+        
+        <div id="groups-section" class="hidden">
+            <h3>Your Admin Groups</h3>
+            <div id="groups-list" class="groups-list">
+                <!-- Groups will be loaded here -->
+            </div>
+        </div>
+        
+        <button id="refresh-btn" class="btn hidden" onclick="loadUserData()">
+            🔄 Refresh
+        </button>
+    </div>
+
+    <script>
+        const API_BASE_URL = 'http://localhost:3000/api/v1';
+        let authToken = null;
+        
+        // Initialize Telegram WebApp
+        window.Telegram.WebApp.ready();
+        window.Telegram.WebApp.expand();
+        
+        // Set theme
+        document.body.style.backgroundColor = window.Telegram.WebApp.themeParams.bg_color || '#ffffff';
+        document.body.style.color = window.Telegram.WebApp.themeParams.text_color || '#000000';
+        
+        async function authenticateUser() {
+            try {
+                updateStatus('Authenticating...', 'loading');
+                
+                const response = await fetch(`${API_BASE_URL}/webapp/auth`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Telegram-Init-Data': window.Telegram.WebApp.initData
+                    }
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`Authentication failed: ${response.statusText}`);
+                }
+                
+                const data = await response.json();
+                authToken = data.token;
+                
+                updateStatus('Authentication successful!', 'success');
+                displayUserInfo(data.user);
+                
+                // Load user groups
+                await loadUserGroups();
+                
+            } catch (error) {
+                console.error('Authentication error:', error);
+                updateStatus(`Error: ${error.message}`, 'error');
+            }
+        }
+        
+        async function loadUserGroups() {
+            try {
+                const response = await fetch(`${API_BASE_URL}/webapp/user/groups`, {
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`,
+                        'X-Telegram-Init-Data': window.Telegram.WebApp.initData
+                    }
+                });
+                
+                if (!response.ok) {
+                    throw new Error('Failed to load groups');
+                }
+                
+                const data = await response.json();
+                displayGroups(data.data);
+                
+            } catch (error) {
+                console.error('Error loading groups:', error);
+                updateStatus(`Error loading groups: ${error.message}`, 'error');
+            }
+        }
+        
+        function updateStatus(message, type) {
+            const statusEl = document.getElementById('status');
+            statusEl.textContent = message;
+            statusEl.className = `status ${type}`;
+            
+            if (type === 'success') {
+                setTimeout(() => {
+                    statusEl.classList.add('hidden');
+                }, 3000);
+            }
+        }
+        
+        function displayUserInfo(user) {
+            document.getElementById('user-name').textContent = user.first_name;
+            document.getElementById('user-id').textContent = user.id;
+            document.getElementById('user-info').classList.remove('hidden');
+            document.getElementById('refresh-btn').classList.remove('hidden');
+        }
+        
+        function displayGroups(groups) {
+            const groupsList = document.getElementById('groups-list');
+            const groupsSection = document.getElementById('groups-section');
+            
+            document.getElementById('groups-count').textContent = groups.length;
+            
+            if (groups.length === 0) {
+                groupsList.innerHTML = '<p>No admin groups found.</p>';
+            } else {
+                groupsList.innerHTML = groups.map(group => `
+                    <div class="group-item" onclick="openGroupSettings('${group.id}', '${group.title}')">
+                        <strong>${group.title}</strong>
+                        <br>
+                        <small>Type: ${group.type} | Members: ${group.member_count || 'Unknown'}</small>
+                    </div>
+                `).join('');
+            }
+            
+            groupsSection.classList.remove('hidden');
+        }
+        
+        function openGroupSettings(groupId, groupTitle) {
+            window.Telegram.WebApp.showAlert(`Opening settings for: ${groupTitle}`);
+            // In a real implementation, you would navigate to a settings page
+            // or open a modal with group-specific settings
+        }
+        
+        async function loadUserData() {
+            await authenticateUser();
+        }
+        
+        // Check if we're running in Telegram WebApp
+        if (window.Telegram.WebApp.initData) {
+            // Start authentication process
+            authenticateUser();
+        } else {
+            updateStatus('This app must be opened from Telegram', 'error');
+        }
+        
+        // Handle close button
+        window.Telegram.WebApp.onEvent('mainButtonClicked', function() {
+            window.Telegram.WebApp.close();
+        });
+        
+        // Set main button
+        window.Telegram.WebApp.MainButton.setText('Close App');
+        window.Telegram.WebApp.MainButton.show();
+    </script>
+</body>
+</html>

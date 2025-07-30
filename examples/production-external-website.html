@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>External Website - Telegram Bot Integration</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: white;
+        }
+        
+        .container {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 8px 32px rgba(31, 38, 135, 0.37);
+            border: 1px solid rgba(255, 255, 255, 0.18);
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .logo {
+            font-size: 48px;
+            margin-bottom: 10px;
+        }
+        
+        .config-section {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        
+        .config-section h3 {
+            margin-top: 0;
+            color: #fff;
+        }
+        
+        input[type="text"], input[type="url"] {
+            width: 100%;
+            padding: 12px;
+            border: none;
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.9);
+            color: #333;
+            margin-bottom: 10px;
+            box-sizing: border-box;
+        }
+        
+        button {
+            background: linear-gradient(45deg, #FF6B6B, #4ECDC4);
+            border: none;
+            color: white;
+            padding: 12px 24px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-weight: bold;
+            margin: 5px;
+            transition: transform 0.2s;
+        }
+        
+        button:hover {
+            transform: translateY(-2px);
+        }
+        
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .status {
+            padding: 15px;
+            border-radius: 10px;
+            margin: 10px 0;
+            font-weight: bold;
+        }
+        
+        .status.success {
+            background: rgba(46, 213, 115, 0.2);
+            border-left: 4px solid #2ed573;
+        }
+        
+        .status.error {
+            background: rgba(255, 107, 107, 0.2);
+            border-left: 4px solid #ff6b6b;
+        }
+        
+        .status.info {
+            background: rgba(116, 185, 255, 0.2);
+            border-left: 4px solid #74b9ff;
+        }
+        
+        .response-data {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 10px;
+            padding: 15px;
+            margin: 10px 0;
+            font-family: 'Courier New', monospace;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+        
+        .instructions {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 20px;
+            border-left: 4px solid #74b9ff;
+        }
+        
+        .step {
+            margin: 10px 0;
+            padding: 10px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="logo">🌐</div>
+            <h1>External Website Integration</h1>
+            <p>Test your Telegram Bot API from any external website</p>
+        </div>
+
+        <div class="instructions">
+            <h3>📋 Setup Instructions</h3>
+            <div class="step">
+                <strong>Step 1:</strong> Start your API server locally: <code>node src/api/server.js</code>
+            </div>
+            <div class="step">
+                <strong>Step 2:</strong> Expose it with ngrok: <code>ngrok http 3000</code>
+            </div>
+            <div class="step">
+                <strong>Step 3:</strong> Copy the HTTPS URL from ngrok and paste it below
+            </div>
+            <div class="step">
+                <strong>Step 4:</strong> Upload this HTML file to any web hosting service
+            </div>
+            <div class="step">
+                <strong>Step 5:</strong> Test the integration!
+            </div>
+        </div>
+
+        <div class="config-section">
+            <h3>⚙️ API Configuration</h3>
+            <input type="url" id="apiUrl" placeholder="Enter your ngrok HTTPS URL (e.g., https://abc123.ngrok.io)" value="">
+            <button onclick="testConnection()">Test Connection</button>
+            <button onclick="saveConfig()">Save Configuration</button>
+        </div>
+
+        <div class="config-section">
+            <h3>🔐 Telegram Authentication (Simulation)</h3>
+            <p><em>Note: In a real Telegram Mini App, this data comes from Telegram WebApp SDK.</em></p>
+            <input type="text" id="mockInitData" placeholder="Mock Telegram initData (for testing)" value="">
+            <button onclick="generateMockData()">Generate Mock Data</button>
+            <button onclick="authenticate()" id="authBtn" disabled>Authenticate</button>
+        </div>
+
+        <div class="config-section">
+            <h3>📊 API Testing</h3>
+            <button onclick="getHealth()" id="healthBtn">Check API Health</button>
+            <button onclick="getUserProfile()" id="profileBtn" disabled>Get User Profile</button>
+            <button onclick="getUserGroups()" id="groupsBtn" disabled>Get User Groups</button>
+        </div>
+
+        <div id="output"></div>
+    </div>
+
+    <script>
+        // Configuration management
+        let apiBaseUrl = '';
+        let authToken = '';
+
+        // Load saved configuration
+        window.onload = function() {
+            const savedUrl = localStorage.getItem('apiUrl');
+            if (savedUrl) {
+                document.getElementById('apiUrl').value = savedUrl;
+                apiBaseUrl = savedUrl;
+            }
+            
+            const savedToken = sessionStorage.getItem('authToken');
+            if (savedToken) {
+                authToken = savedToken;
+                updateAuthState(true);
+            }
+        };
+
+        function saveConfig() {
+            const url = document.getElementById('apiUrl').value.trim();
+            if (!url) {
+                showStatus('Please enter an API URL', 'error');
+                return;
+            }
+            
+            // Remove trailing slash
+            apiBaseUrl = url.replace(/\/$/, '');
+            localStorage.setItem('apiUrl', apiBaseUrl);
+            showStatus('Configuration saved!', 'success');
+        }
+
+        function generateMockData() {
+            // Generate mock Telegram WebApp initData for testing
+            const mockUser = {
+                id: Math.floor(Math.random() * 1000000),
+                first_name: 'Test',
+                last_name: 'User',
+                username: 'testuser',
+                language_code: 'en'
+            };
+            
+            const queryString = `user=${encodeURIComponent(JSON.stringify(mockUser))}&auth_date=${Math.floor(Date.now() / 1000)}&hash=mock_hash_for_testing`;
+            document.getElementById('mockInitData').value = queryString;
+            showStatus('Mock data generated! Note: This won\'t work with real authentication.', 'info');
+        }
+
+        async function testConnection() {
+            const url = document.getElementById('apiUrl').value.trim();
+            if (!url) {
+                showStatus('Please enter an API URL first', 'error');
+                return;
+            }
+
+            try {
+                showStatus('Testing connection...', 'info');
+                const response = await fetch(`${url}/api/v1/webapp/health`, {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    showStatus('✅ Connection successful!', 'success');
+                    showResponse('Health Check Response', data);
+                    apiBaseUrl = url.replace(/\/$/, '');
+                } else {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+            } catch (error) {
+                showStatus(`❌ Connection failed: ${error.message}`, 'error');
+                console.error('Connection test failed:', error);
+            }
+        }
+
+        async function authenticate() {
+            if (!apiBaseUrl) {
+                showStatus('Please configure and test API URL first', 'error');
+                return;
+            }
+
+            const initData = document.getElementById('mockInitData').value.trim();
+            if (!initData) {
+                showStatus('Please generate or enter mock initData first', 'error');
+                return;
+            }
+
+            try {
+                showStatus('Authenticating...', 'info');
+                document.getElementById('authBtn').disabled = true;
+
+                const response = await fetch(`${apiBaseUrl}/api/v1/webapp/auth`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Telegram-Init-Data': initData
+                    }
+                });
+
+                const data = await response.json();
+
+                if (response.ok && data.token) {
+                    authToken = data.token;
+                    sessionStorage.setItem('authToken', authToken);
+                    showStatus('✅ Authentication successful!', 'success');
+                    showResponse('Authentication Response', data);
+                    updateAuthState(true);
+                } else {
+                    throw new Error(data.message || 'Authentication failed');
+                }
+            } catch (error) {
+                showStatus(`❌ Authentication failed: ${error.message}`, 'error');
+                updateAuthState(false);
+            } finally {
+                document.getElementById('authBtn').disabled = false;
+            }
+        }
+
+        async function getHealth() {
+            if (!apiBaseUrl) {
+                showStatus('Please configure API URL first', 'error');
+                return;
+            }
+
+            try {
+                const response = await fetch(`${apiBaseUrl}/api/v1/webapp/health`);
+                const data = await response.json();
+                
+                if (response.ok) {
+                    showStatus('✅ Health check successful', 'success');
+                    showResponse('Health Response', data);
+                } else {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+            } catch (error) {
+                showStatus(`❌ Health check failed: ${error.message}`, 'error');
+            }
+        }
+
+        async function getUserProfile() {
+            await makeAuthenticatedRequest('/api/v1/webapp/user/profile', 'GET', 'User Profile');
+        }
+
+        async function getUserGroups() {
+            await makeAuthenticatedRequest('/api/v1/webapp/user/groups', 'GET', 'User Groups');
+        }
+
+        async function makeAuthenticatedRequest(endpoint, method, label) {
+            if (!apiBaseUrl) {
+                showStatus('Please configure API URL first', 'error');
+                return;
+            }
+
+            if (!authToken) {
+                showStatus('Please authenticate first', 'error');
+                return;
+            }
+
+            try {
+                const response = await fetch(`${apiBaseUrl}${endpoint}`, {
+                    method: method,
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${authToken}`
+                    }
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    showStatus(`✅ ${label} retrieved successfully`, 'success');
+                    showResponse(`${label} Response`, data);
+                } else {
+                    throw new Error(data.message || `HTTP ${response.status}`);
+                }
+            } catch (error) {
+                showStatus(`❌ ${label} request failed: ${error.message}`, 'error');
+                if (error.message.includes('401')) {
+                    authToken = '';
+                    sessionStorage.removeItem('authToken');
+                    updateAuthState(false);
+                }
+            }
+        }
+
+        function updateAuthState(isAuthenticated) {
+            document.getElementById('profileBtn').disabled = !isAuthenticated;
+            document.getElementById('groupsBtn').disabled = !isAuthenticated;
+            document.getElementById('authBtn').disabled = !document.getElementById('mockInitData').value.trim();
+        }
+
+        function showStatus(message, type) {
+            const output = document.getElementById('output');
+            const statusDiv = document.createElement('div');
+            statusDiv.className = `status ${type}`;
+            statusDiv.textContent = message;
+            
+            // Add timestamp
+            const timestamp = new Date().toLocaleTimeString();
+            statusDiv.innerHTML = `[${timestamp}] ${message}`;
+            
+            output.appendChild(statusDiv);
+            output.scrollTop = output.scrollHeight;
+        }
+
+        function showResponse(title, data) {
+            const output = document.getElementById('output');
+            const responseDiv = document.createElement('div');
+            responseDiv.innerHTML = `
+                <h4>${title}:</h4>
+                <div class="response-data">${JSON.stringify(data, null, 2)}</div>
+            `;
+            output.appendChild(responseDiv);
+            output.scrollTop = output.scrollHeight;
+        }
+
+        // Enable auth button when mock data is entered
+        document.getElementById('mockInitData').addEventListener('input', function() {
+            document.getElementById('authBtn').disabled = !this.value.trim();
+        });
+    </script>
+</body>
+</html>

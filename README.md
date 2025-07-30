@@ -1,448 +1,430 @@
-# AI Telegram Moderator Bot
+# Telegram Moderator Bot API
 
-An advanced, multi-tenant Telegram moderation bot built with Node.js that combines AI-powered content analysis with a comprehensive REST API. This bot uses natural language processing to detect and moderate spam or promotional content while providing administrators with powerful tools to manage user strikes fairly and transparently.
+A comprehensive API server for Telegram bot moderation with support for Mini Apps and external website integration.
 
-**🆕 Features: REST API • AI Content Analysis • Advanced Strike System • Multi-tenant Architecture**
+## 🚀 Features
 
-## ✨ Key Features
+- **Telegram Mini App Support** - Full WebApp authentication and integration
+- **External Website Integration** - CORS-enabled API for any website
+- **AI-Powered Moderation** - Smart content analysis with NLP
+- **Security First** - Rate limiting, CORS protection, input validation
+- **Developer Friendly** - Swagger documentation, comprehensive testing
+- **Production Ready** - Docker support, monitoring, logging
 
-### 🤖 **AI-Powered Moderation**
-- **Smart Content Analysis**: Uses OpenAI's GPT models to analyze messages and detect spam, advertisements, and unwanted content with configurable sensitivity levels
-- **Context-Aware Detection**: Considers whitelisted keywords and community context to reduce false positives
-- **Configurable AI Sensitivity**: Adjustable spam detection thresholds per group
-
-### ⚖️ **Advanced Strike & Penalty System**
-- **Automatic Strikes**: Users receive strikes automatically based on AI content analysis
-- **Manual Strike Management**: Admins can add, remove, or set strike counts with detailed reasons and audit trails
-- **Flexible Penalty Levels**: Configure different actions (alert, mute, kick, ban) at different strike thresholds
-- **Strike Expiration**: Strikes automatically expire after configurable periods
-- **Good Behavior Rewards**: Users can earn strike reductions through positive participation
-- **Detailed History**: Complete audit trail of all strikes and moderation actions
-
-### 🌐 **REST API Integration**
-- **Full REST API**: Complete programmatic access to all bot features
-- **JWT Authentication**: Secure token-based authentication integrated with Telegram
-- **Group Management**: API endpoints for settings, statistics, and configuration
-- **Real-time Updates**: Synchronize bot and API data seamlessly
-
-### 🔐 **Privacy & Security**
-- **Private Notifications**: Sensitive information sent via private messages to avoid public shaming
-- **Admin-only Commands**: Smart command visibility based on user permissions
-- **Secure Authentication**: JWT tokens with configurable expiration
-- **Data Protection**: SQLite database with proper user data management
-
-### ⚙️ **Multi-tenant Architecture**
-- **Per-Group Configuration**: Independent settings for each Telegram group
-- **Scalable Design**: Supports unlimited groups with isolated configurations
-- **Admin Verification**: Automatic verification of group administrator permissions
-- **Clean Separation**: Bot logic separated from API logic for maintainability
-
----
-
-## � Quick Start
+## 📋 Quick Start
 
 ### Prerequisites
-- **Node.js** 22.0.0 or higher
-- **npm** (comes with Node.js)
-- **Telegram Bot Token** from [@BotFather](https://t.me/BotFather)
-- **OpenAI API Key** for AI content analysis
+
+- Node.js 22+ 
+- npm or yarn
+- SQLite (included)
+- ngrok (for external testing)
 
 ### Installation
 
-1. **Clone the repository:**
-   ```bash
-   git clone https://github.com/hmcelik/telegram-moderator-bot.git
-   cd telegram-moderator-bot
-   ```
-
-2. **Install dependencies:**
-   ```bash
-   npm install
-   ```
-
-3. **Configure environment variables:**
-   
-   Copy the example file and edit it:
-   ```bash
-   cp .env.example .env
-   ```
-   
-   Edit `.env` with your configuration:
-   ```env
-   # Required: Telegram Bot Configuration
-   TELEGRAM_BOT_TOKEN=your_bot_token_from_botfather
-   ADMIN_USER_ID=your_telegram_user_id
-   
-   # Required: AI/NLP Configuration  
-   OPENAI_API_KEY=your_openai_api_key
-   
-   # Optional: Database Configuration
-   DATABASE_PATH=./moderator.db
-   
-   # Optional: API Server Configuration
-   API_PORT=3000
-   JWT_SECRET=your-secure-random-string-min-32-chars
-   ```
-
-4. **Start the services:**
-   ```bash
-   # Option 1: Start both bot and API together
-   npm start & npm run start:api
-   
-   # Option 2: Start individual services
-   npm start           # Telegram bot only
-   npm run start:api   # REST API server only
-   
-   # Option 3: Development mode with auto-reload
-   npm run dev         # Bot with nodemon
-   npm run dev:api     # API with nodemon
-   ```
-
-5. **Add bot to your Telegram group:**
-   - Add your bot to a Telegram group as an administrator
-   - Run `/register` command in the group to initialize the bot
-   - Use `/settings` in private message to configure moderation settings
-
-### Verification
-- **Bot Status**: Check logs for "🚀 Bot is running! Watching for messages..."
-- **API Status**: Visit `http://localhost:3000/api/v1/groups` (should return 401 without auth)
-- **Database**: Check that `moderator.db` file is created in your project directory
-
----
-
-## 🤖 Bot Commands & Usage
-
-### For All Users
-
-| Command | Description | Usage |
-|---------|-------------|-------|
-| `/help` | Show available commands (context-aware) | `/help` |
-| `/mystrikes` | Check your strike history (sent privately) | `/mystrikes` |
-
-### For Group Administrators
-
-| Command | Description | Usage Example |
-|---------|-------------|---------------|
-| `/register` | Initialize bot in new group (required first step) | `/register` |
-| `/status` | Display current bot configuration in group | `/status` |
-| `/checkstrikes <user>` | View user's strike history (sent privately) | `/checkstrikes @username` |
-| `/addstrike <user> <count> [reason]` | Add strikes to user with reason | `/addstrike @user 2 Spam posting` |
-| `/removestrike <user> [count] [reason]` | Remove strikes from user | `/removestrike @user 1 Appeal accepted` |
-| `/setstrike <user> <count> [reason]` | Set exact strike count for user | `/setstrike @user 0 Fresh start` |
-| `/auditlog` | View recent moderation actions (sent privately) | `/auditlog` |
-
-### Configuration Settings
-
-Send `/settings` to the bot in a **private message** to access the configuration menu where you can adjust:
-
-- **Penalty Levels**: Configure at what strike count users get alerted, muted, kicked, or banned
-- **AI Sensitivity**: Adjust spam detection threshold (0.1 = very sensitive, 0.9 = very permissive)
-- **Timing Settings**: Mute duration, warning message display time, strike expiration
-- **Behavior Settings**: Good behavior forgiveness period, keyword whitelist
-- **Messages**: Customize warning messages shown to users
-
-### Automatic Moderation
-
-The bot automatically:
-1. **Analyzes** all group messages using AI
-2. **Scores** content for spam/promotional probability
-3. **Takes action** based on configured thresholds and penalty levels
-4. **Logs** all actions for transparency and appeals
-5. **Manages** strike expiration and good behavior rewards
-
----
-
-## 🌐 REST API Reference
-
-The bot includes a comprehensive REST API for building web dashboards, mobile apps, or integrating with other systems.
-
-### Quick API Test
-
-1. **Start API server**: `npm run start:api`
-2. **Test connectivity**: Visit `http://localhost:3000/api/v1/groups` (expect 401 error = working!)
-3. **Generate test JWT**: Use the provided `test-jwt.js` script
-
-### Base Configuration
-
-```
-Base URL: http://localhost:3000/api/v1
-Authentication: Bearer JWT tokens
-Content-Type: application/json
-CORS: Enabled for all origins
-```
-
-### Authentication Flow
-
-```mermaid
-sequenceDiagram
-    participant Client
-    participant API
-    participant Telegram
-    
-    Client->>API: POST /auth/verify {user, hash}
-    API->>Telegram: Verify hash authenticity
-    API->>Client: JWT token {expires: 24h}
-    Client->>API: Requests with Authorization: Bearer <token>
-```
-
-### Available Endpoints
-
-| Method | Endpoint | Description | Auth Required |
-|--------|----------|-------------|---------------|
-| `POST` | `/auth/verify` | Authenticate with Telegram data | ❌ |
-| `GET` | `/groups` | List user's admin groups | ✅ |
-| `GET` | `/groups/:groupId/settings` | Get group configuration | ✅ |
-| `PUT` | `/groups/:groupId/settings` | Update group settings | ✅ |
-| `GET` | `/groups/:groupId/stats` | Get moderation statistics | ✅ |
-
-### API Examples
-
-#### Browser Testing (Developer Console)
-```javascript
-// Generate JWT token first with test-jwt.js, then:
-const token = 'your_jwt_token_here';
-
-// List groups
-fetch('http://localhost:3000/api/v1/groups', {
-  headers: { 'Authorization': `Bearer ${token}` }
-}).then(r => r.json()).then(console.log);
-
-// Get group settings  
-fetch('http://localhost:3000/api/v1/groups/-4982630468/settings', {
-  headers: { 'Authorization': `Bearer ${token}` }
-}).then(r => r.json()).then(console.log);
-
-// Update settings
-fetch('http://localhost:3000/api/v1/groups/-4982630468/settings', {
-  method: 'PUT',
-  headers: { 
-    'Authorization': `Bearer ${token}`,
-    'Content-Type': 'application/json'
-  },
-  body: JSON.stringify({
-    settings: { muteLevel: 2, kickLevel: 4 }
-  })
-}).then(r => r.json()).then(console.log);
-```
-
-#### cURL Examples
 ```bash
-# List groups
-curl -H "Authorization: Bearer YOUR_JWT_TOKEN" \
-     http://localhost:3000/api/v1/groups
+# Clone the repository
+git clone https://github.com/hmcelik/telegram-moderator-bot.git
+cd telegram-moderator-bot
 
-# Get settings
-curl -H "Authorization: Bearer YOUR_JWT_TOKEN" \
-     http://localhost:3000/api/v1/groups/-4982630468/settings
+# Install dependencies
+npm install
 
-# Update settings
-curl -X PUT \
-     -H "Authorization: Bearer YOUR_JWT_TOKEN" \
-     -H "Content-Type: application/json" \
-     -d '{"settings":{"muteLevel":1}}' \
-     http://localhost:3000/api/v1/groups/-4982630468/settings
+# Create environment file
+cp .env.example .env
+# Edit .env with your Telegram bot token and other settings
 ```
 
-### Response Examples
+### Development Setup
 
-**Groups List:**
-```json
-[{"chatId": "-4982630468", "chatTitle": "My Group"}]
+1. **Start the Bot** (Terminal 1):
+   ```bash
+   npm run dev
+   ```
+
+2. **Start the API Server** (Terminal 2):
+   ```bash
+   node src/api/server.js
+   ```
+
+3. **Start Development Server** (Terminal 3):
+   ```bash
+   node src/dev-server.js
+   ```
+
+4. **Expose API for External Testing** (Terminal 4):
+   ```bash
+   ngrok http 3000
+   ```
+
+### Running Services
+
+| Service | URL | Purpose |
+|---------|-----|---------|
+| **Bot** | N/A | Telegram bot polling |
+| **API Server** | `http://localhost:3000` | Main API endpoints |
+| **Dev Server** | `http://localhost:8080` | Serves HTML examples |
+| **Ngrok Tunnel** | `https://abc123.ngrok.io` | Public API access |
+| **Swagger Docs** | `http://localhost:3000/api/docs` | API documentation |
+| **Ngrok Dashboard** | `http://127.0.0.1:4040` | Tunnel status |
+
+## 🌐 API Endpoints
+
+### Health & Status
+- `GET /api/v1/webapp/health` - API health check
+
+### Authentication
+- `POST /api/v1/webapp/auth` - Telegram WebApp authentication
+
+### User Management
+- `GET /api/v1/webapp/user/profile` - Get user profile
+- `GET /api/v1/webapp/user/groups` - Get user's groups
+
+### Group Management
+- `GET /api/v1/webapp/group/:groupId/settings` - Get group settings
+- `PUT /api/v1/webapp/group/:groupId/settings` - Update group settings
+- `GET /api/v1/webapp/group/:groupId/stats` - Get group statistics
+
+## 🔐 Authentication
+
+### Telegram Mini Apps
+
+```javascript
+// In your Telegram Mini App
+const initData = window.Telegram.WebApp.initData;
+
+const response = await fetch('/api/v1/webapp/auth', {
+    method: 'POST',
+    headers: {
+        'X-Telegram-Init-Data': initData,
+        'Content-Type': 'application/json'
+    }
+});
+
+const { token } = await response.json();
 ```
 
-**Group Settings:**
-```json
-{
-  "alertLevel": 1, "muteLevel": 2, "kickLevel": 3, "banLevel": 0,
-  "spamThreshold": 0.85, "muteDurationMinutes": 60,
-  "warningMessage": "⚠️ {user}, please avoid promotional content.",
-  "strikeExpirationDays": 30, "goodBehaviorDays": 7
-}
+### External Websites
+
+```javascript
+// For external websites (testing only)
+const mockInitData = "user=%7B%22id%22%3A123..."; // Mock data
+
+const response = await fetch('https://your-ngrok-url.ngrok.io/api/v1/webapp/auth', {
+    method: 'POST',
+    headers: {
+        'X-Telegram-Init-Data': mockInitData,
+        'Content-Type': 'application/json'
+    }
+});
 ```
 
-**Statistics:**
-```json
-{
-  "totalMessagesProcessed": 1547,
-  "violationsDetected": 23, 
-  "actionsTaken": 15,
-  "deletionsToday": 3
-}
-```
+## 🧪 Testing
 
-### Error Handling
-All errors follow the format:
-```json
-{
-  "status": "error",
-  "statusCode": 401,
-  "message": "Unauthorized - Missing or invalid JWT token"
-}
-```
-
-Common status codes: `400` (Bad Request), `401` (Unauthorized), `403` (Forbidden), `404` (Not Found), `500` (Server Error)
-
----
-
-## 🧪 Development & Testing
-
-### Running Tests
-The project includes comprehensive test coverage with Vitest:
+### Run Tests
 
 ```bash
 # Run all tests
 npm test
 
+# Run specific test file
+npm test __tests__/api/webapp.test.js
+
 # Run tests in watch mode
 npm run test:watch
-
-# Run specific test files
-npm test __tests__/api/groups.test.js
-npm test __tests__/bot/messageHandler.test.js
-npm test __tests__/integration/e2e.test.js
 ```
 
 ### Test Coverage
-- **Unit Tests**: Individual components and services
-- **Integration Tests**: API endpoints with database
-- **End-to-End Tests**: Complete bot + API workflows
-- **Mock Services**: Telegram API, OpenAI, database operations
 
-### Development Workflow
+- ✅ **API Endpoints** - All 7 WebApp endpoints
+- ✅ **Authentication** - Telegram WebApp validation
+- ✅ **CORS** - Cross-origin request handling
+- ✅ **Rate Limiting** - Request throttling
+- ✅ **Error Handling** - Proper error responses
+- ✅ **Security** - Input validation and sanitization
 
-1. **Start development servers:**
+### Example Applications
+
+| Example | URL | Purpose |
+|---------|-----|---------|
+| **Local External Website** | `http://localhost:8080/external` | Local testing |
+| **Telegram Mini App** | `http://localhost:8080/miniapp` | Mini app demo |
+| **Production External** | `examples/production-external-website.html` | Deploy anywhere |
+
+## 🔧 Configuration
+
+### Environment Variables
+
+```bash
+# .env file
+BOT_TOKEN=your_telegram_bot_token
+DATABASE_PATH=./moderator.db
+API_PORT=3000
+DEV_SERVER_PORT=8080
+JWT_SECRET=your_jwt_secret
+TELEGRAM_BOT_SECRET=your_bot_secret
+LOG_LEVEL=info
+```
+
+### CORS Configuration
+
+The API automatically allows:
+- `web.telegram.org` (Telegram WebApp)
+- `localhost` and `127.0.0.1` (Development)
+- `*.ngrok.io` and `*.ngrok.app` (Testing)
+- Custom domains (add to configuration)
+
+### Rate Limiting
+
+- **General endpoints**: 100 requests per 15 minutes
+- **Authentication**: 5 requests per 15 minutes
+- **Health check**: Higher limits for monitoring
+
+## 🚀 Deployment
+
+### Local Development
+
+1. All services running locally
+2. Use `http://localhost:8080/external` for testing
+3. Perfect for development and debugging
+
+### External Testing with Ngrok
+
+1. **Start services**:
    ```bash
-   npm run dev     # Bot with auto-reload
-   npm run dev:api # API with auto-reload
+   # Terminal 1: API Server
+   node src/api/server.js
+   
+   # Terminal 2: Ngrok
+   ngrok http 3000
    ```
 
-2. **Test changes:**
+2. **Deploy test website**:
+   - Upload `examples/production-external-website.html` to any hosting
+   - Configure with your ngrok HTTPS URL
+   - Test external integration
+
+3. **Supported hosts**:
+   - GitHub Pages
+   - Netlify
+   - Vercel
+   - Any web hosting service
+
+### Production Deployment
+
+#### API Server Options
+
+**Cloud Platforms**:
+- **Heroku**: `git push heroku main`
+- **Railway**: Connect GitHub repository
+- **DigitalOcean**: App Platform deployment
+- **AWS**: EC2 or Elastic Beanstalk
+
+**VPS Deployment**:
+```bash
+# On your server
+git clone https://github.com/hmcelik/telegram-moderator-bot.git
+cd telegram-moderator-bot
+npm install --production
+npm start
+```
+
+**Docker Deployment**:
+```bash
+# Build and run
+docker build -t telegram-moderator-bot .
+docker run -p 3000:3000 telegram-moderator-bot
+```
+
+#### Domain & SSL
+
+1. **Point domain** to your server
+2. **Setup SSL** with Let's Encrypt:
    ```bash
-   npm test        # Run test suite
+   certbot --nginx -d yourdomain.com
    ```
+3. **Update CORS** configuration with your domain
 
-3. **API testing:**
-   ```bash
-   node test-jwt.js  # Generate test JWT token
-   # Use token with browser console or cURL
-   ```
+## 🔒 Security Features
 
-### Code Structure Guidelines
+### Built-in Security
 
-- **Separation of Concerns**: Bot logic, API logic, and shared services are clearly separated
-- **Environment Configuration**: All secrets and config in `.env` file
-- **Error Handling**: Comprehensive error handling with proper logging
-- **Database Migrations**: Automatic schema creation and updates
-- **Security**: JWT authentication, input validation, admin verification
+- ✅ **Helmet.js** - Security headers
+- ✅ **CORS Protection** - Controlled cross-origin access
+- ✅ **Rate Limiting** - Request throttling
+- ✅ **Input Validation** - Request sanitization
+- ✅ **JWT Authentication** - Secure token-based auth
+- ✅ **HMAC Verification** - Telegram data validation
 
-### Contributing
+### Production Security Checklist
 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Make your changes following the existing code style
-4. Add tests for new functionality
-5. Ensure all tests pass (`npm test`)
-6. Commit your changes (`git commit -m 'Add amazing feature'`)
-7. Push to your branch (`git push origin feature/amazing-feature`)
-8. Open a Pull Request
+- [ ] **HTTPS enabled** (SSL certificate)
+- [ ] **Environment variables** secured
+- [ ] **Database encryption** (if sensitive data)
+- [ ] **Server monitoring** setup
+- [ ] **Backup strategy** implemented
+- [ ] **Access logs** configured
+- [ ] **Firewall rules** configured
 
----
+## 📊 Monitoring
 
-## 📂 Project Structure
+### Health Checks
 
-The project is structured to separate concerns, making it easy to maintain and extend.
+```bash
+# Check API health
+curl https://your-api-domain.com/api/v1/webapp/health
+
+# Expected response
+{
+  "status": "healthy",
+  "timestamp": "2025-07-30T12:00:00.000Z",
+  "features": {
+    "webAppSupport": true,
+    "cors": true,
+    "rateLimit": true,
+    "authentication": true,
+    "swagger": true
+  }
+}
+```
+
+### Logging
+
+- **Console logs** in development
+- **File logs** in production (`combined.log`, `error.log`)
+- **Structured JSON** logging
+- **Request/response** tracking
+
+## 🛠 Development
+
+### Project Structure
 
 ```
 src/
-├── api/                          # REST API server
-│   ├── controllers/             # API request handlers
-│   │   ├── authController.js    # Authentication endpoints
-│   │   └── groupController.js   # Group management endpoints
-│   ├── middleware/              # Express middleware
-│   │   ├── checkJwt.js         # JWT authentication
-│   │   ├── checkGroupAdmin.js  # Group admin verification
-│   │   └── verifyTelegramAuth.js # Telegram auth verification
-│   ├── routes/                  # API route definitions
-│   │   ├── auth.js             # Authentication routes
-│   │   └── groups.js           # Group management routes
-│   ├── services/               # API-specific services
-│   │   └── tokenService.js     # JWT token management
-│   ├── utils/                  # API utilities
-│   │   ├── apiError.js         # Custom error class
-│   │   └── errorResponder.js   # Error handling middleware
-│   └── server.js               # Express server setup
-├── bot/                         # Telegram bot
-│   ├── handlers/               # Message and command processors
-│   │   ├── callbackHandler.js  # Inline keyboard callbacks
-│   │   ├── commandHandler.js   # Bot commands
-│   │   └── messageHandler.js   # Message analysis & moderation
-│   ├── keyboards/              # Inline keyboard layouts
-│   │   ├── aiSensitivityMenu.js
-│   │   ├── keywordMenu.js
-│   │   ├── mainMenu.js
-│   │   ├── miscMenu.js
-│   │   ├── moderatorMenu.js
-│   │   ├── penaltyLevelsMenu.js
-│   │   └── whitelistMenu.js
-│   └── index.js                # Bot entry point
-└── common/                      # Shared services & utilities
-    ├── config/                 # Configuration management
-    │   └── index.js            # Settings & defaults
-    ├── services/               # Core services
-    │   ├── database.js         # SQLite database operations
-    │   ├── logger.js           # Winston logging
-    │   ├── nlp.js             # OpenAI/NLP integration
-    │   └── telegram.js         # Telegram Bot API wrapper
-    └── utils/
-        └── enums.js            # Shared enumerations
+├── api/                    # API server components
+│   ├── server.js          # Main API server
+│   ├── controllers/       # Business logic
+│   ├── middleware/        # Authentication, validation
+│   ├── routes/           # API route definitions
+│   └── services/         # Utility services
+├── bot/                   # Telegram bot
+│   ├── index.js          # Bot entry point
+│   ├── handlers/         # Message, command, callback handlers
+│   └── keyboards/        # Inline keyboards
+├── common/               # Shared utilities
+│   ├── config/          # Configuration management
+│   ├── services/        # Database, logging, NLP
+│   └── utils/           # Enums, helpers
+└── dev-server.js        # Development HTML server
 
-__tests__/                       # Test suites
-├── api/                        # API endpoint tests
-├── bot/                        # Bot handler tests
-├── integration/                # End-to-end tests
-└── database.test.js            # Database tests
+examples/                 # Integration examples
+├── external-website.html     # Local testing
+├── production-external-website.html  # Deploy anywhere
+├── telegram-miniapp.html     # Mini app demo
+└── miniapp.html             # Simple mini app
 
-.env                            # Environment variables
-package.json                    # Project metadata & scripts
-vitest.config.js               # Test configuration
+__tests__/               # Test suites
+├── api/                # API endpoint tests
+├── bot/                # Bot functionality tests
+├── database/           # Database tests
+└── integration/        # End-to-end tests
 ```
 
------
+### Adding New Endpoints
 
-## 📦 Dependencies
+1. **Create controller** in `src/api/controllers/`
+2. **Add routes** in `src/api/routes/`
+3. **Update Swagger** documentation
+4. **Write tests** in `__tests__/api/`
+5. **Update README** if needed
 
-### Core Dependencies
-- **axios**: For making HTTP requests to external APIs (OpenAI, Telegram).
-- **cors**: Cross-Origin Resource Sharing middleware for the API server.
-- **dotenv**: To load environment variables from the `.env` file.
-- **express**: Fast, unopinionated web framework for the REST API.
-- **express-validator**: Input validation and sanitization for API endpoints.
-- **jsonwebtoken**: JWT token generation and verification for API authentication.
-- **node-telegram-bot-api**: The core library for interacting with the Telegram Bot API.
-- **sqlite** & **sqlite3**: Promise-based wrapper and driver for the SQLite database.
-- **winston**: Versatile logging library for both bot and API operations.
+## 🐛 Troubleshooting
 
-### Development Dependencies
-- **nodemon**: Development server with auto-reload for both bot and API.
-- **supertest**: HTTP testing library for API endpoint testing.
-- **vitest**: Modern and fast test runner for unit and integration testing.
+### Common Issues
+
+**CORS Errors**:
+```bash
+# Check if domain is allowed
+curl -H "Origin: https://yourdomain.com" \
+     -H "Access-Control-Request-Method: POST" \
+     -X OPTIONS https://your-api.com/api/v1/webapp/auth
+```
+
+**Authentication Failures**:
+- Real Telegram auth only works in Telegram context
+- Use mock data for external website testing
+- Check initData format and timestamp
+
+**Connection Issues**:
+```bash
+# Test API directly
+curl https://your-api.com/api/v1/webapp/health
+
+# Test with authentication
+curl -X POST https://your-api.com/api/v1/webapp/auth \
+     -H "X-Telegram-Init-Data: your_init_data" \
+     -H "Content-Type: application/json"
+```
+
+**Rate Limiting**:
+- Default: 100 requests per 15 minutes
+- Auth: 5 requests per 15 minutes
+- Check response headers for retry information
+
+### Debug Mode
+
+```bash
+# Enable debug logging
+LOG_LEVEL=debug node src/api/server.js
+
+# Watch file changes
+nodemon src/api/server.js
+```
+
+## 📚 Documentation
+
+- **API Docs**: `http://localhost:3000/api/docs` (Swagger UI)
+- **External Testing**: `EXTERNAL_WEBSITE_TESTING_GUIDE.md`
+- **Deployment**: `DEPLOYMENT_GUIDE.md`
+- **API Integration**: `API_INTEGRATION_GUIDE.md`
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create feature branch: `git checkout -b feature/amazing-feature`
+3. Make changes and add tests
+4. Commit changes: `git commit -m 'Add amazing feature'`
+5. Push to branch: `git push origin feature/amazing-feature`
+6. Open a Pull Request
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 📚 Complete Documentation
+
+📖 **[TELEGRAM DASHBOARD SETUP GUIDE](TELEGRAM_DASHBOARD_SETUP_GUIDE.md)** - Complete guide for Mini Apps & External Apps development including:
+- Detailed setup instructions
+- API endpoints reference
+- Authentication systems
+- Dashboard MVP features
+- Testing strategies
+- Deployment guides
+- Security considerations
+- Troubleshooting
+
+## 🆘 Support
+
+- **Issues**: [GitHub Issues](https://github.com/hmcelik/telegram-moderator-bot/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/hmcelik/telegram-moderator-bot/discussions)
+- **Complete Setup Guide**: [TELEGRAM_DASHBOARD_SETUP_GUIDE.md](TELEGRAM_DASHBOARD_SETUP_GUIDE.md)
+
+## ⭐ Acknowledgments
+
+- Telegram Bot API team
+- Express.js community
+- Contributors and testers
 
 ---
 
-## � License
-
-This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) file for details.
-
-## 🤝 Support
-
-- **Issues**: Report bugs or request features on [GitHub Issues](https://github.com/hmcelik/telegram-moderator-bot/issues)
-- **Discussions**: Join community discussions on [GitHub Discussions](https://github.com/hmcelik/telegram-moderator-bot/discussions)
-- **Documentation**: Comprehensive guides available in the `/docs` directory
-
-## ⭐ Star the Project
-
-If you find this project helpful, please consider giving it a star on GitHub! It helps others discover the project and motivates continued development.
-
----
-
-*Built with ❤️ for the Telegram community*
+**Made with ❤️ for the Telegram community**

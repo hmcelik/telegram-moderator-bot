@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import ApiError from '../utils/apiError.js';
+import logger from '../../common/services/logger.js';
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || 'test_bot_token';
 
@@ -79,6 +80,15 @@ const verifyInitData = (initData) => {
 
 export const verifyTelegramAuth = (req, res, next) => {
     const body = req.body;
+    
+    // Debug logging
+    logger.info('🔍 Auth verification attempt:', {
+        hasInitData: !!body.initData,
+        hasUserData: !!(body.id || body.first_name),
+        bodyKeys: Object.keys(body),
+        initDataLength: body.initData ? body.initData.length : 0,
+        initDataSample: body.initData ? body.initData.substring(0, 100) + '...' : null
+    });
     
     // Check if this is raw initData from Mini App
     if (typeof body.initData === 'string') {

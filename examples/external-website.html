@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Moderator Bot - External Integration</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background-color: #f5f5f5;
+            color: #333;
+            line-height: 1.6;
+        }
+        
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 40px 20px;
+            border-radius: 12px;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+        }
+        
+        .header p {
+            font-size: 1.2rem;
+            opacity: 0.9;
+        }
+        
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        
+        .status {
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            text-align: center;
+            font-weight: bold;
+        }
+        
+        .status.loading {
+            background-color: #e3f2fd;
+            color: #1976d2;
+        }
+        
+        .status.success {
+            background-color: #e8f5e8;
+            color: #2e7d32;
+        }
+        
+        .status.error {
+            background-color: #ffebee;
+            color: #c62828;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+            color: #555;
+        }
+        
+        .form-group input {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+        
+        .form-group input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            transition: transform 0.2s, box-shadow 0.2s;
+            margin-right: 10px;
+        }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+        }
+        
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+        
+        .btn-secondary {
+            background: #6c757d;
+        }
+        
+        .api-info {
+            background: #f8f9fa;
+            border-left: 4px solid #667eea;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        
+        .hidden {
+            display: none;
+        }
+        
+        .endpoint-list {
+            list-style: none;
+            padding: 0;
+        }
+        
+        .endpoint-list li {
+            background: #f8f9fa;
+            margin: 10px 0;
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 4px solid #28a745;
+        }
+        
+        .method {
+            font-weight: bold;
+            color: #28a745;
+            margin-right: 10px;
+        }
+        
+        .health-status {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .health-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+        
+        .health-indicator.healthy {
+            background-color: #28a745;
+        }
+        
+        .health-indicator.unhealthy {
+            background-color: #dc3545;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🤖 Moderator Bot API</h1>
+            <p>External Website Integration Demo</p>
+        </div>
+        
+        <div class="card">
+            <h2>API Health Check</h2>
+            <div id="health-status" class="status loading">
+                Checking API health...
+            </div>
+            <button id="check-health-btn" class="btn" onclick="checkApiHealth()">
+                Check Health
+            </button>
+        </div>
+        
+        <div class="card">
+            <h2>Telegram Authentication</h2>
+            <p>For external websites, you would typically implement Telegram Login Widget or use bot commands to get user tokens.</p>
+            
+            <div class="form-group">
+                <label for="auth-token">JWT Token (from bot or login):</label>
+                <input type="text" id="auth-token" placeholder="Enter your JWT token here...">
+            </div>
+            
+            <button id="test-auth-btn" class="btn" onclick="testAuthentication()">
+                Test Authentication
+            </button>
+            
+            <div id="auth-result" class="hidden">
+                <h3>Authentication Result:</h3>
+                <pre id="auth-data"></pre>
+            </div>
+        </div>
+        
+        <div class="card">
+            <h2>Available API Endpoints</h2>
+            <div class="api-info">
+                <p><strong>Base URL:</strong> <code>http://localhost:3000/api/v1</code></p>
+                <p><strong>Documentation:</strong> <a href="http://localhost:3000/api/docs" target="_blank">Swagger UI</a></p>
+            </div>
+            
+            <ul class="endpoint-list">
+                <li>
+                    <span class="method">GET</span>
+                    <code>/webapp/health</code> - API health check
+                </li>
+                <li>
+                    <span class="method">POST</span>
+                    <code>/webapp/auth</code> - Telegram WebApp authentication
+                </li>
+                <li>
+                    <span class="method">GET</span>
+                    <code>/webapp/user/profile</code> - Get user profile
+                </li>
+                <li>
+                    <span class="method">GET</span>
+                    <code>/webapp/user/groups</code> - Get user's admin groups
+                </li>
+                <li>
+                    <span class="method">GET</span>
+                    <code>/webapp/group/{id}/settings</code> - Get group settings
+                </li>
+                <li>
+                    <span class="method">PUT</span>
+                    <code>/webapp/group/{id}/settings</code> - Update group settings
+                </li>
+                <li>
+                    <span class="method">GET</span>
+                    <code>/webapp/group/{id}/stats</code> - Get group statistics
+                </li>
+            </ul>
+        </div>
+        
+        <div class="card">
+            <h2>Integration Features</h2>
+            <ul>
+                <li>✅ CORS enabled for cross-origin requests</li>
+                <li>✅ Rate limiting protection</li>
+                <li>✅ Security headers with Helmet</li>
+                <li>✅ Telegram WebApp data validation</li>
+                <li>✅ JWT token authentication</li>
+                <li>✅ Swagger API documentation</li>
+                <li>✅ RESTful API endpoints</li>
+                <li>✅ Error handling and logging</li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE_URL = 'http://localhost:3000/api/v1';
+        
+        async function checkApiHealth() {
+            const statusEl = document.getElementById('health-status');
+            const btnEl = document.getElementById('check-health-btn');
+            
+            try {
+                statusEl.className = 'status loading';
+                statusEl.innerHTML = '<div class="health-status"><div class="health-indicator"></div>Checking API health...</div>';
+                btnEl.disabled = true;
+                
+                const response = await fetch(`${API_BASE_URL}/webapp/health`);
+                const data = await response.json();
+                
+                if (response.ok) {
+                    statusEl.className = 'status success';
+                    statusEl.innerHTML = `
+                        <div class="health-status">
+                            <div class="health-indicator healthy"></div>
+                            <div>
+                                <strong>API is healthy!</strong><br>
+                                Features: WebApp Support (${data.features.webAppSupport}), 
+                                CORS (${data.features.cors}), 
+                                Rate Limit (${data.features.rateLimit})
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    throw new Error('Health check failed');
+                }
+            } catch (error) {
+                statusEl.className = 'status error';
+                statusEl.innerHTML = `
+                    <div class="health-status">
+                        <div class="health-indicator unhealthy"></div>
+                        <div>API is not accessible: ${error.message}</div>
+                    </div>
+                `;
+            } finally {
+                btnEl.disabled = false;
+            }
+        }
+        
+        async function testAuthentication() {
+            const token = document.getElementById('auth-token').value.trim();
+            const resultEl = document.getElementById('auth-result');
+            const dataEl = document.getElementById('auth-data');
+            
+            if (!token) {
+                alert('Please enter a JWT token first');
+                return;
+            }
+            
+            try {
+                // Test token by trying to get user profile
+                const response = await fetch(`${API_BASE_URL}/auth/verify`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    dataEl.textContent = JSON.stringify(data, null, 2);
+                    resultEl.classList.remove('hidden');
+                } else {
+                    throw new Error(data.message || 'Authentication failed');
+                }
+            } catch (error) {
+                dataEl.textContent = `Error: ${error.message}`;
+                resultEl.classList.remove('hidden');
+            }
+        }
+        
+        // Check API health on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            checkApiHealth();
+        });
+    </script>
+</body>
+</html>
