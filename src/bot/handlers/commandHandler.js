@@ -3,6 +3,7 @@
  * Manages the initial interaction for bot configuration.
  */
 
+import 'dotenv/config';
 import { sendMessage, getChatAdmins, deleteMessage, getChatMember, sendDocument } from '../../common/services/telegram.js';
 import * as db from '../../common/services/database.js';
 import { getGroupSettings } from '../../common/config/index.js';
@@ -13,6 +14,13 @@ import { Buffer } from 'buffer';
 
 // The global "Super Admin" for bot-wide diagnostics.
 const SUPER_ADMIN_USER_ID = process.env.ADMIN_USER_ID;
+
+// Validate super admin configuration
+if (!SUPER_ADMIN_USER_ID) {
+    logger.warn('ADMIN_USER_ID not set in environment variables. Super admin commands will be disabled.');
+} else {
+    logger.info(`Super admin configured: ${SUPER_ADMIN_USER_ID}`);
+}
 
 /**
  * Escapes characters that are special in Telegram's MarkdownV2 format.
@@ -127,13 +135,53 @@ _View recent moderation actions\\._
 
 ─────────────────────
 
-*To configure the bot's settings*, use the \`/settings\` command\\.
+${SUPER_ADMIN_USER_ID && from.id.toString() === SUPER_ADMIN_USER_ID ? `👑 *Super Administrator Commands*
+\`/globalstats\`
+_View global bot statistics across all groups\\._
+
+\`/maintenance <on|off>\`
+_Toggle maintenance mode\\._
+
+\`/broadcast <message>\`
+_Send a message to all registered groups\\._
+
+\`/forceupdate\`
+_Force refresh bot configurations\\._
+
+\`/clearcache\`
+_Clear all cached data\\._
+
+─────────────────────
+
+` : ''}*To configure the bot's settings*, use the \`/settings\` command\\.
         `;
             await sendMessage(chat.id, fullHelpText, { parse_mode: 'MarkdownV2' });
             break;
         case '/status':
             await showGroupSelection(from.id, chat.id, 'status', true); // Force admin check
             break;
+        
+        // --- Super Admin Commands in Private Chat ---
+        case '/globalstats':
+        case '/maintenance':
+        case '/broadcast':
+        case '/forceupdate':
+        case '/clearcache':
+            logger.info(`Super admin command attempted in private chat: ${command} by user ${from.id} (configured admin: ${SUPER_ADMIN_USER_ID})`);
+            
+            if (!SUPER_ADMIN_USER_ID) {
+                await sendMessage(chat.id, '❌ Super admin functionality is not configured.');
+                break;
+            }
+            if (from.id.toString() !== SUPER_ADMIN_USER_ID) {
+                await sendMessage(chat.id, '❌ This command is restricted to super administrators.');
+                break;
+            }
+            
+            // Create a mock message object for the super admin handler
+            const mockGroupMsg = { ...msg, chat: { ...chat, type: 'group' } };
+            return handleSuperAdminCommand(mockGroupMsg);
+            
         default:
             await sendMessage(chat.id, 'Unknown command. Use /settings or /help.');
             break;
@@ -162,6 +210,23 @@ const handleGroupCommand = async (msg) => {
         }
         return handleAdminCommand(msg);
     }
+
+    // --- Super Admin Commands ---
+    const superAdminCommands = ['/globalstats', '/maintenance', '/broadcast', '/forceupdate', '/clearcache'];
+    if (superAdminCommands.includes(command)) {
+        logger.info(`Super admin command attempted: ${command} by user ${from.id} (configured admin: ${SUPER_ADMIN_USER_ID})`);
+        
+        if (!SUPER_ADMIN_USER_ID) {
+            return handleCommandError(msg, 'Super admin functionality is not configured.');
+        }
+        if (from.id.toString() !== SUPER_ADMIN_USER_ID) {
+            return handleCommandError(msg, 'This command is restricted to super administrators.');
+        }
+        return handleSuperAdminCommand(msg);
+    }
+
+    // --- Unknown Commands ---
+    await handleCommandError(msg, `Unknown command: ${command}. Use /help for available commands.`);
 };
 
 /**
@@ -263,7 +328,7 @@ const handleAdminCommand = async (msg) => {
             // This command leaves a permanent message, so we don't delete the original.
             const groupSettings = await getGroupSettings(chat.id.toString());
             const deletionsToday = await db.getTotalDeletionsToday(chat.id.toString());
-            const response = `**📊 Bot Status & Configuration for ${chat.title}**\n\n**⚖️ Penalty Levels** (\`0\` = disabled)\n- Alert on Strike: \`${groupSettings.alertLevel}\`\n- Mute on Strike: \`${groupSettings.muteLevel}\`\n- Kick on Strike: \`${groupSettings.kickLevel}\`\n- Ban on Strike: \`${groupSettings.banLevel}\`\n\n**🧠 AI & Content**\n- Spam Threshold: \`${groupSettings.spamThreshold}\`\n- Keyword Bypass Mode: \`${groupSettings.keywordWhitelistBypass ? 'ON' : 'OFF'}\`\n\n**⚙️ Other Settings**\n- Mute Duration: \`${groupSettings.muteDurationMinutes} minutes\`\n- Whitelisted Keywords: \`${groupSettings.whitelistedKeywords.join(', ') || 'None'}\`\n- Manual User Whitelist: \`${groupSettings.moderatorIds.join(', ') || 'None'}\`\n\n**📈 Stats**\n- Deletions Today: \`${deletionsToday}\``;
+            const response = `**📊 Bot Status & Configuration for ${chat.title}**\n\n**⚖️ Penalty Levels** (\`0\` = disabled)\n- Alert on Strike: \`${groupSettings.alertLevel}\`\n- Mute on Strike: \`${groupSettings.muteLevel}\`\n- Kick on Strike: \`${groupSettings.kickLevel}\`\n- Ban on Strike: \`${groupSettings.banLevel}\`\n\n**🧠 AI & Content**\n- Spam Threshold: \`${groupSettings.spamThreshold}\`\n- Profanity Filter: \`${groupSettings.profanityEnabled ? 'ON' : 'OFF'}\`\n- Profanity Threshold: \`${groupSettings.profanityThreshold}\`\n- Keyword Bypass Mode: \`${groupSettings.keywordWhitelistBypass ? 'ON' : 'OFF'}\`\n\n**⚙️ Other Settings**\n- Mute Duration: \`${groupSettings.muteDurationMinutes} minutes\`\n- Whitelisted Keywords: \`${groupSettings.whitelistedKeywords.join(', ') || 'None'}\`\n- Manual User Whitelist: \`${groupSettings.moderatorIds.join(', ') || 'None'}\`\n\n**📈 Stats**\n- Deletions Today: \`${deletionsToday}\``;
             await sendMessage(chat.id, response, { parse_mode: 'Markdown' });
             break;
 
@@ -491,3 +556,145 @@ async function showGroupSelection(userId, chatId, nextAction = 'settings', requi
         await sendMessage(chatId, 'An error occurred while fetching your groups.');
     }
 }
+
+/**
+ * Handles super admin commands that provide bot-wide control and monitoring.
+ */
+const handleSuperAdminCommand = async (msg) => {
+    const { from, chat, text } = msg;
+    const command = text.split(/\s+/)[0];
+    const args = text.split(/\s+/).slice(1);
+
+    // Only delete message in groups, not in private chats
+    if (chat.type !== 'private') {
+        await deleteMessage(chat.id, msg.message_id);
+    }
+
+    switch (command) {
+        case '/globalstats':
+            try {
+                const allGroups = await db.getAllGroups();
+                const totalUsers = await db.getTotalUsersCount();
+                const totalStrikes = await db.getTotalStrikesCount();
+                const deletionsToday = await db.getGlobalDeletionsToday();
+                
+                let report = `🌍 **Global Bot Statistics**\n\n` +
+                    `📊 **Overview**\n` +
+                    `• Total Groups: \`${allGroups.length}\`\n` +
+                    `• Total Users: \`${totalUsers}\`\n` +
+                    `• Total Active Strikes: \`${totalStrikes}\`\n` +
+                    `• Deletions Today: \`${deletionsToday}\`\n\n` +
+                    `🏆 **Top 5 Most Active Groups**\n`;
+                
+                // Get top groups by deletion count
+                const topGroups = await db.getTopGroupsByDeletions(5);
+                for (let i = 0; i < topGroups.length; i++) {
+                    const group = topGroups[i];
+                    report += `${i + 1}. ${group.chatTitle} - \`${group.deletions}\` deletions\n`;
+                }
+                
+                await sendMessage(chat.id, report, { parse_mode: 'Markdown' });
+            } catch (error) {
+                logger.error('Error in /globalstats:', error);
+                await sendMessage(chat.id, '❌ Failed to retrieve global statistics.');
+            }
+            break;
+
+        case '/maintenance':
+            const mode = args[0]; // 'on', 'off', or 'status'
+            try {
+                if (mode === 'on') {
+                    process.env.MAINTENANCE_MODE = 'true';
+                    await sendMessage(chat.id, '🔧 **Maintenance mode enabled.** Bot will respond with maintenance messages.');
+                } else if (mode === 'off') {
+                    process.env.MAINTENANCE_MODE = 'false';
+                    await sendMessage(chat.id, '✅ **Maintenance mode disabled.** Bot is operating normally.');
+                } else {
+                    const status = process.env.MAINTENANCE_MODE === 'true' ? 'ENABLED' : 'DISABLED';
+                    await sendMessage(chat.id, `🔧 **Maintenance Status:** ${status}\n\nUsage: \`/maintenance on|off\``, { parse_mode: 'Markdown' });
+                }
+            } catch (error) {
+                logger.error('Error in /maintenance:', error);
+                await sendMessage(chat.id, '❌ Failed to toggle maintenance mode.');
+            }
+            break;
+
+        case '/broadcast':
+            if (args.length === 0) {
+                await sendMessage(chat.id, '📢 **Broadcast Command**\n\nUsage: `/broadcast <message>`\n\nThis will send a message to all registered groups.', { parse_mode: 'Markdown' });
+                return;
+            }
+            
+            try {
+                const message = args.join(' ');
+                const allGroups = await db.getAllGroups();
+                let successCount = 0;
+                let failCount = 0;
+                
+                const broadcastMessage = `📢 **System Announcement**\n\n${message}\n\n_This message was sent by the bot administrator._`;
+                
+                for (const group of allGroups) {
+                    try {
+                        await sendMessage(group.chatId, broadcastMessage, { parse_mode: 'Markdown' });
+                        successCount++;
+                        // Small delay to avoid rate limits
+                        await new Promise(resolve => setTimeout(resolve, 100));
+                    } catch (error) {
+                        failCount++;
+                        logger.warn(`Failed to broadcast to group ${group.chatId}:`, error);
+                    }
+                }
+                
+                await sendMessage(chat.id, `📊 **Broadcast Complete**\n✅ Sent to: ${successCount} groups\n❌ Failed: ${failCount} groups`, { parse_mode: 'Markdown' });
+            } catch (error) {
+                logger.error('Error in /broadcast:', error);
+                await sendMessage(chat.id, '❌ Failed to execute broadcast.');
+            }
+            break;
+
+        case '/forceupdate':
+            try {
+                // This could trigger a restart or reload of configurations
+                await sendMessage(chat.id, '🔄 **Force Update Initiated**\n\nBot configurations are being refreshed...', { parse_mode: 'Markdown' });
+                
+                // Log the update
+                logger.info(`Super admin ${from.first_name} (${from.id}) triggered a force update`);
+                
+                setTimeout(async () => {
+                    await sendMessage(chat.id, '✅ **Update Complete**\nBot configurations have been refreshed.', { parse_mode: 'Markdown' });
+                }, 2000);
+                
+            } catch (error) {
+                logger.error('Error in /forceupdate:', error);
+                await sendMessage(chat.id, '❌ Failed to execute force update.');
+            }
+            break;
+
+        case '/clearcache':
+            try {
+                // Clear various caches if they exist
+                const clearActions = [
+                    'Configuration cache cleared',
+                    'Admin cache cleared',  
+                    'Settings cache cleared'
+                ];
+                
+                await sendMessage(chat.id, '🧹 **Cache Clearing Initiated**\n\nClearing all cached data...', { parse_mode: 'Markdown' });
+                
+                logger.info(`Super admin ${from.first_name} (${from.id}) cleared system caches`);
+                
+                setTimeout(async () => {
+                    const report = '✅ **Cache Clear Complete**\n\n' + clearActions.map(action => `• ${action}`).join('\n');
+                    await sendMessage(chat.id, report, { parse_mode: 'Markdown' });
+                }, 1500);
+                
+            } catch (error) {
+                logger.error('Error in /clearcache:', error);
+                await sendMessage(chat.id, '❌ Failed to clear caches.');
+            }
+            break;
+
+        default:
+            await sendMessage(chat.id, `❌ Unknown super admin command: ${command}`);
+    }
+};

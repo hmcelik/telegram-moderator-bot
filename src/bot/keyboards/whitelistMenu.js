@@ -13,9 +13,9 @@ export const whitelistKeyboard = (chatId) => ({
     reply_markup: {
         inline_keyboard: [
             // Navigate to the keyword management menu.
-            [{ text: 'Manage Keywords', callback_data: `whitelist_keywords:${chatId}` }],
+            [{ text: '🔑 Manage Keywords', callback_data: `whitelist_keywords:${chatId}` }],
             // Navigate to the moderator management menu.
-            [{ text: 'Manage Moderators', callback_data: `whitelist_mods:${chatId}` }],
+            [{ text: '👮 Manage Moderators', callback_data: `whitelist_mods:${chatId}` }],
             // Navigation button to return to the main settings menu.
             [{ text: '⬅️ Back to Main Menu', callback_data: `settings_main:${chatId}` }],
         ],

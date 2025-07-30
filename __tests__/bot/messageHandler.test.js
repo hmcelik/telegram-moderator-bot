@@ -24,6 +24,8 @@ describe('Message Handler', () => {
     // Define a complete, default settings object
     const fullMockSettings = {
         spamThreshold: 0.85,
+        profanityThreshold: 0.7,
+        profanityEnabled: true,
         alertLevel: 1,
         kickLevel: 0,
         banLevel: 0,
@@ -32,6 +34,7 @@ describe('Message Handler', () => {
         whitelistedKeywords: [],
         keywordWhitelistBypass: true,
         warningMessage: 'Spam detected {user}',
+        profanityWarningMessage: 'Please keep language appropriate {user}',
         warningMessageDeleteSeconds: 0,
         goodBehaviorDays: 0,
         muteDurationMinutes: 60,
@@ -41,7 +44,12 @@ describe('Message Handler', () => {
     beforeEach(() => {
         vi.clearAllMocks();
 
-        nlp.isPromotional.mockResolvedValue({ score: 0.1 });
+        nlp.isPromotional.mockResolvedValue({ score: 0.1, isSpam: false });
+        nlp.hasProfanity.mockResolvedValue({ hasProfanity: false, severity: 0.1, type: 'clean' });
+        nlp.analyzeMessage.mockResolvedValue({
+            spam: { score: 0.1, isSpam: false },
+            profanity: { hasProfanity: false, severity: 0.1, type: 'clean' }
+        });
         db.recordStrike.mockResolvedValue(1);
         db.getStrikes.mockResolvedValue({ count: 0, timestamp: null });
         db.upsertUser.mockResolvedValue(true);
@@ -58,7 +66,10 @@ describe('Message Handler', () => {
     });
 
     test('should take action on promotional messages', async () => {
-        nlp.isPromotional.mockResolvedValue({ score: 0.9 });
+        nlp.analyzeMessage.mockResolvedValue({
+            spam: { score: 0.9, isSpam: true },
+            profanity: { hasProfanity: false, severity: 0.1, type: 'clean' }
+        });
         await handleMessage(mockMsg);
         expect(db.upsertUser).toHaveBeenCalledWith(mockMsg.from);
         expect(telegram.deleteMessage).toHaveBeenCalledWith(mockMsg.chat.id, mockMsg.message_id);
@@ -66,9 +77,47 @@ describe('Message Handler', () => {
         expect(telegram.sendMessage).toHaveBeenCalled();
     });
 
+    test('should take action on profanity messages', async () => {
+        nlp.analyzeMessage.mockResolvedValue({
+            spam: { score: 0.1, isSpam: false },
+            profanity: { hasProfanity: true, severity: 0.8, type: 'explicit' }
+        });
+        await handleMessage(mockMsg);
+        expect(db.upsertUser).toHaveBeenCalledWith(mockMsg.from);
+        expect(telegram.deleteMessage).toHaveBeenCalledWith(mockMsg.chat.id, mockMsg.message_id);
+        expect(db.recordStrike).toHaveBeenCalledWith(mockMsg.chat.id.toString(), mockMsg.from.id.toString(), expect.objectContaining({
+            violationType: 'PROFANITY'
+        }));
+        expect(telegram.sendMessage).toHaveBeenCalled();
+    });
+
+    test('should prioritize spam over profanity when both are detected', async () => {
+        nlp.analyzeMessage.mockResolvedValue({
+            spam: { score: 0.9, isSpam: true },
+            profanity: { hasProfanity: true, severity: 0.8, type: 'explicit' }
+        });
+        await handleMessage(mockMsg);
+        expect(db.recordStrike).toHaveBeenCalledWith(mockMsg.chat.id.toString(), mockMsg.from.id.toString(), expect.objectContaining({
+            violationType: 'SPAM'
+        }));
+    });
+
+    test('should not take action when profanity detection is disabled', async () => {
+        getGroupSettings.mockResolvedValue({ ...fullMockSettings, profanityEnabled: false });
+        nlp.isPromotional.mockResolvedValue({ score: 0.1, isSpam: false });
+        
+        await handleMessage(mockMsg);
+        expect(nlp.analyzeMessage).not.toHaveBeenCalled();
+        expect(nlp.isPromotional).toHaveBeenCalled();
+        expect(telegram.deleteMessage).not.toHaveBeenCalled();
+    });
+
     describe('Penalties', () => {
         test('should mute user when muteLevel is reached', async () => {
-            nlp.isPromotional.mockResolvedValue({ score: 0.9 });
+            nlp.analyzeMessage.mockResolvedValue({
+                spam: { score: 0.9, isSpam: true },
+                profanity: { hasProfanity: false, severity: 0.1, type: 'clean' }
+            });
             // **FIX**: Set alertLevel to 0 to ensure mute is the primary action
             getGroupSettings.mockResolvedValue({ ...fullMockSettings, alertLevel: 0, muteLevel: 1 });
             db.recordStrike.mockResolvedValue(1); // Simulate reaching strike 1
@@ -78,7 +127,10 @@ describe('Message Handler', () => {
         });
 
         test('should kick user when kickLevel is reached', async () => {
-            nlp.isPromotional.mockResolvedValue({ score: 0.9 });
+            nlp.analyzeMessage.mockResolvedValue({
+                spam: { score: 0.9, isSpam: true },
+                profanity: { hasProfanity: false, severity: 0.1, type: 'clean' }
+            });
             getGroupSettings.mockResolvedValue({ ...fullMockSettings, kickLevel: 2 });
             db.recordStrike.mockResolvedValue(2); // Simulate reaching strike 2
             

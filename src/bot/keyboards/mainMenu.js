@@ -14,10 +14,12 @@ export const mainKeyboard = (chatId) => ({
         inline_keyboard: [
             // Navigate to AI sensitivity settings.
             [{ text: '🧠 AI Sensitivity', callback_data: `settings_ai_sensitivity:${chatId}` }],
+            // Navigate to profanity filter settings.
+            [{ text: '🤬 Profanity Filter', callback_data: `settings_profanity:${chatId}` }],
             // Navigate to penalty level settings.
             [{ text: '⚖️ Penalty Levels', callback_data: `settings_penalty_levels:${chatId}` }],
             // Navigate to whitelist management (keywords and moderators).
-            [{ text: '🚫 Whitelist Management', callback_data: `settings_whitelist:${chatId}` }],
+            [{ text: '� Whitelist Management', callback_data: `settings_whitelist:${chatId}` }],
             // Navigate to miscellaneous settings.
             [{ text: '⚙️ Miscellaneous', callback_data: `settings_misc:${chatId}` }],
         ],

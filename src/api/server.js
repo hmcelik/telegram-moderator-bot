@@ -10,6 +10,7 @@ import logger from '../common/services/logger.js';
 import authRoutes from './routes/auth.js';
 import groupRoutes from './routes/groups.js';
 import webAppRoutes from './routes/webapp.js';
+import nlpRoutes from './routes/nlp.js';
 import errorResponder from './utils/errorResponder.js';
 import ApiError from './utils/apiError.js';
 
@@ -134,6 +135,7 @@ app.use('/api/v1/auth', authLimiter);
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/groups', groupRoutes);
 app.use('/api/v1/webapp', webAppRoutes);
+app.use('/api/v1/nlp', nlpRoutes);
 
 app.use((req, res, next) => {
     next(new ApiError(404, 'Not Found'));

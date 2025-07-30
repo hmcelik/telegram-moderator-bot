@@ -1,15 +1,19 @@
-# Telegram Moderator Bot API
+# Telegram Moderator Bot
 
-A comprehensive API server for Telegram bot moderation with support for Mini Apps and external website integration.
+A comprehensive AI-powered Telegram moderation bot with advanced features and complete API integration.
 
-## 🚀 Features
+## 🚀 Key Features
 
-- **Telegram Mini App Support** - Full WebApp authentication and integration
-- **External Website Integration** - CORS-enabled API for any website
-- **AI-Powered Moderation** - Smart content analysis with NLP
-- **Security First** - Rate limiting, CORS protection, input validation
-- **Developer Friendly** - Swagger documentation, comprehensive testing
-- **Production Ready** - Docker support, monitoring, logging
+- **🧠 AI-Powered Moderation** - Smart spam detection with GPT-4o-mini integration
+- **🤬 Advanced Profanity Filter** - Separate profanity detection with local + AI hybrid approach
+- **📱 Complete API Suite** - Full REST API with NLP testing endpoints
+- **👑 Super Admin Controls** - Global statistics, maintenance mode, broadcasting, cache management
+- **🎛️ Consistent UI** - Uniform keyboard menus with emoji consistency
+- **⚡ Optimized Performance** - Faster responses with parallel processing
+- **🔒 Security First** - Rate limiting, CORS protection, JWT authentication
+- **🧪 Comprehensive Testing** - 152 tests across 15 test suites
+- **🐳 Production Ready** - Docker support, monitoring, logging
+- **🔄 Role-based Commands** - Smart command registration based on user permissions
 
 ## 📋 Quick Start
 
@@ -44,12 +48,12 @@ cp .env.example .env
 
 2. **Start the API Server** (Terminal 2):
    ```bash
-   node src/api/server.js
+   npm run dev:api
    ```
 
 3. **Start Development Server** (Terminal 3):
    ```bash
-   node src/dev-server.js
+   npm run dev:examples
    ```
 
 4. **Expose API for External Testing** (Terminal 4):
@@ -75,15 +79,52 @@ cp .env.example .env
 
 ### Authentication
 - `POST /api/v1/webapp/auth` - Telegram WebApp authentication
+- `POST /api/v1/auth/login` - Enhanced login widget authentication
 
 ### User Management
 - `GET /api/v1/webapp/user/profile` - Get user profile
 - `GET /api/v1/webapp/user/groups` - Get user's groups
 
 ### Group Management
-- `GET /api/v1/webapp/group/:groupId/settings` - Get group settings
-- `PUT /api/v1/webapp/group/:groupId/settings` - Update group settings
-- `GET /api/v1/webapp/group/:groupId/stats` - Get group statistics
+- `GET /api/v1/groups` - List user's groups
+- `GET /api/v1/groups/:groupId/settings` - Get group settings
+- `PUT /api/v1/groups/:groupId/settings` - Update group settings
+- `GET /api/v1/groups/:groupId/stats` - Get group statistics
+
+### WebApp Specific
+- `GET /api/v1/webapp/group/:groupId/settings` - Get group settings (WebApp)
+- `PUT /api/v1/webapp/group/:groupId/settings` - Update group settings (WebApp)
+- `GET /api/v1/webapp/group/:groupId/stats` - Get group statistics (WebApp)
+
+### NLP Testing (NEW! 🔥)
+- `GET /api/v1/nlp/status` - Get NLP service status
+- `POST /api/v1/nlp/test/spam` - Test spam detection
+- `POST /api/v1/nlp/test/profanity` - Test profanity detection
+- `POST /api/v1/nlp/analyze` - Complete message analysis
+
+## 🤖 Bot Commands
+
+### Public Commands (Available to all users)
+- `/help` - Show command list and bot information
+- `/mystrikes` - Check your strike count privately
+
+### Administrator Commands (Group admins only)
+- `/register` - Register the bot in a new group
+- `/status` - Display current bot settings for the group
+- `/checkstrikes @user` - View a user's strike history
+- `/addstrike @user <amount> [reason]` - Add strikes to a user
+- `/removestrike @user [amount] [reason]` - Remove strikes from a user (defaults to 1)
+- `/setstrike @user <amount> [reason]` - Set user's strike count to specific number
+- `/auditlog` - View recent moderation actions (sent as file)
+
+### Super Administrator Commands (Bot owner only)
+- `/globalstats` - View global bot statistics across all groups
+- `/maintenance <on|off>` - Toggle maintenance mode
+- `/broadcast <message>` - Send message to all registered groups
+- `/forceupdate` - Force refresh bot configurations
+- `/clearcache` - Clear all cached data
+
+> **Note:** Super admin commands work in both private chats and groups. Commands are automatically registered based on user permissions.
 
 ## 🔐 Authentication
 
@@ -136,12 +177,15 @@ npm run test:watch
 
 ### Test Coverage
 
-- ✅ **API Endpoints** - All 7 WebApp endpoints
+- ✅ **152 Tests Passing** - Comprehensive test suite
+- ✅ **API Endpoints** - All REST API endpoints tested
+- ✅ **Bot Commands** - User, admin, and super admin commands
+- ✅ **NLP Processing** - Spam and profanity detection
 - ✅ **Authentication** - Telegram WebApp validation
-- ✅ **CORS** - Cross-origin request handling
-- ✅ **Rate Limiting** - Request throttling
+- ✅ **Database Operations** - Full CRUD testing
+- ✅ **Security Features** - CORS, rate limiting, validation
 - ✅ **Error Handling** - Proper error responses
-- ✅ **Security** - Input validation and sanitization
+- ✅ **Integration Tests** - End-to-end workflows
 
 ### Example Applications
 
@@ -163,8 +207,31 @@ API_PORT=3000
 DEV_SERVER_PORT=8080
 JWT_SECRET=your_jwt_secret
 TELEGRAM_BOT_SECRET=your_bot_secret
+OPENAI_API_KEY=your_openai_api_key
+ADMIN_USER_ID=your_telegram_user_id    # Required for super admin commands
 LOG_LEVEL=info
+MAINTENANCE_MODE=false                   # Can be toggled via /maintenance command
 ```
+
+### Super Admin Setup
+
+To enable super admin functionality:
+
+1. **Get your Telegram User ID**:
+   - Message [@userinfobot](https://t.me/userinfobot) on Telegram
+   - Copy your user ID
+
+2. **Set environment variable**:
+   ```bash
+   ADMIN_USER_ID=your_telegram_user_id
+   ```
+
+3. **Restart the bot** to register super admin commands
+
+4. **Available super admin commands**:
+   - Work in both private chats and groups
+   - Automatically registered for the configured user
+   - Provide global bot management capabilities
 
 ### CORS Configuration
 
@@ -184,16 +251,34 @@ The API automatically allows:
 
 ### Local Development
 
-1. All services running locally
-2. Use `http://localhost:8080/external` for testing
-3. Perfect for development and debugging
+1. **Start all services**:
+   ```bash
+   # Terminal 1: Bot with auto-reload
+   npm run dev
+   
+   # Terminal 2: API Server with auto-reload
+   npm run dev:api
+   
+   # Terminal 3: Development HTML server
+   npm run dev:examples
+   ```
+
+2. **Access services**:
+   - Bot: Running in background (check console logs)
+   - API: `http://localhost:3000`
+   - Examples: `http://localhost:8080`
+   - Swagger: `http://localhost:3000/api/docs`
+
+3. **Test locally**:
+   - Use `http://localhost:8080/external` for testing
+   - Perfect for development and debugging
 
 ### External Testing with Ngrok
 
 1. **Start services**:
    ```bash
    # Terminal 1: API Server
-   node src/api/server.js
+   npm start:api
    
    # Terminal 2: Ngrok
    ngrok http 3000
@@ -226,7 +311,14 @@ The API automatically allows:
 git clone https://github.com/hmcelik/telegram-moderator-bot.git
 cd telegram-moderator-bot
 npm install --production
-npm start
+
+# Set up environment variables
+cp .env.example .env
+# Edit .env with your configuration
+
+# Start services
+npm start        # Start bot
+npm run start:api # Start API server (separate terminal)
 ```
 
 **Docker Deployment**:
@@ -330,13 +422,23 @@ __tests__/               # Test suites
 └── integration/        # End-to-end tests
 ```
 
-### Adding New Endpoints
+### Adding New Features
 
-1. **Create controller** in `src/api/controllers/`
-2. **Add routes** in `src/api/routes/`
-3. **Update Swagger** documentation
-4. **Write tests** in `__tests__/api/`
-5. **Update README** if needed
+1. **New Bot Commands**:
+   - Add handler in `src/bot/handlers/commandHandler.js`
+   - Register in `src/bot/index.js` 
+   - Add tests in `__tests__/bot/`
+
+2. **New API Endpoints**:
+   - Create controller in `src/api/controllers/`
+   - Add routes in `src/api/routes/`
+   - Update Swagger documentation
+   - Write tests in `__tests__/api/`
+
+3. **New Super Admin Commands**:
+   - Add to `handleSuperAdminCommand()` in `commandHandler.js`
+   - Register in `superAdminCommands` array in `index.js`
+   - Ensure proper permission checks
 
 ## 🐛 Troubleshooting
 
@@ -375,18 +477,38 @@ curl -X POST https://your-api.com/api/v1/webapp/auth \
 
 ```bash
 # Enable debug logging
-LOG_LEVEL=debug node src/api/server.js
+LOG_LEVEL=debug npm run dev
 
-# Watch file changes
-nodemon src/api/server.js
+# Watch file changes (development)
+npm run dev        # Bot with nodemon
+npm run dev:api    # API with nodemon
+npm run dev:examples # Examples server with nodemon
+```
+
+### Testing Super Admin Commands
+
+```bash
+# 1. Set your user ID in .env
+ADMIN_USER_ID=your_telegram_user_id
+
+# 2. Restart bot to register commands
+npm run dev
+
+# 3. Test commands in Telegram
+/globalstats        # View global statistics
+/maintenance on     # Enable maintenance mode
+/broadcast Hello!   # Send to all groups
+/forceupdate       # Refresh configurations
+/clearcache        # Clear all caches
 ```
 
 ## 📚 Documentation
 
-- **API Docs**: `http://localhost:3000/api/docs` (Swagger UI)
-- **External Testing**: `EXTERNAL_WEBSITE_TESTING_GUIDE.md`
-- **Deployment**: `DEPLOYMENT_GUIDE.md`
-- **API Integration**: `API_INTEGRATION_GUIDE.md`
+- **📖 [Complete Setup Guide](TELEGRAM_DASHBOARD_SETUP_GUIDE.md)** - Comprehensive guide for Mini Apps & External Apps
+- **🔄 [Upgrade Guide](UPGRADE_GUIDE.md)** - Step-by-step upgrade instructions for existing installations
+- **📝 [Changelog](CHANGELOG.md)** - Detailed version history and feature additions
+- **🔧 API Docs**: `http://localhost:3000/api/docs` (Swagger UI)
+- **🧪 Testing Guide**: See [Testing](#-testing) section above
 
 ## 🤝 Contributing
 
@@ -404,14 +526,29 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## 📚 Complete Documentation
 
 📖 **[TELEGRAM DASHBOARD SETUP GUIDE](TELEGRAM_DASHBOARD_SETUP_GUIDE.md)** - Complete guide for Mini Apps & External Apps development including:
-- Detailed setup instructions
+- Detailed setup instructions  
 - API endpoints reference
 - Authentication systems
 - Dashboard MVP features
+- Super admin configuration
 - Testing strategies
 - Deployment guides
 - Security considerations
 - Troubleshooting
+
+🔄 **[UPGRADE GUIDE](UPGRADE_GUIDE.md)** - For existing installations:
+- Version upgrade instructions
+- Database migration steps
+- Environment variable updates
+- Super admin setup
+- Rollback procedures
+- Troubleshooting
+
+📝 **[CHANGELOG](CHANGELOG.md)** - Version history:
+- Feature additions
+- Bug fixes
+- Breaking changes
+- Performance improvements
 
 ## 🆘 Support
 

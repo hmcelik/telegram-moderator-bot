@@ -1,10 +1,10 @@
 /**
  * @fileoverview This is the core message processor for the moderation bot.
- * It handles all non-command messages in groups, analyzes them for spam,
+ * It handles all non-command messages in groups, analyzes them for spam and profanity,
  * and applies penalties based on the configured rules for each specific group.
  */
 
-import { isPromotional } from '../../common/services/nlp.js';
+import { isPromotional, hasProfanity, analyzeMessage } from '../../common/services/nlp.js';
 import * as db from '../../common/services/database.js';
 import { deleteMessage, kickUser, banUser, muteUser, sendMessage, getChatAdmins } from '../../common/services/telegram.js';
 import { getGroupSettings } from '../../common/config/index.js';
@@ -81,30 +81,52 @@ export const handleMessage = async (msg) => {
     }
 
     try {
-        // Send the message text to the NLP service for classification.
-        const classification = await isPromotional(text, groupSettings.whitelistedKeywords);
-        const finalScore = classification.score;
-        logger.info(`Message from ${from.id} in chat ${chat.id} classified with final score: ${finalScore.toFixed(2)}`);
+        // Use combined analysis for better performance when both spam and profanity checks are needed
+        const shouldCheckProfanity = groupSettings.profanityEnabled && groupSettings.profanityThreshold > 0;
+        
+        let spamResult, profanityResult;
+        
+        if (shouldCheckProfanity) {
+            // Use combined analysis for efficiency
+            const analysis = await analyzeMessage(text, groupSettings.whitelistedKeywords);
+            spamResult = analysis.spam;
+            profanityResult = analysis.profanity;
+        } else {
+            // Only check for spam
+            spamResult = await isPromotional(text, groupSettings.whitelistedKeywords);
+            profanityResult = { hasProfanity: false, severity: 0, type: 'disabled' };
+        }
 
-        // If the spam score meets or exceeds the configured threshold, take action.
-        if (finalScore >= groupSettings.spamThreshold) {
+        logger.debug(`Message analysis - Spam: ${spamResult.score.toFixed(2)}, Profanity: ${profanityResult.severity.toFixed(2)}`);
+
+        // Determine which violation occurred (spam takes precedence for logging)
+        const isSpamViolation = spamResult.score >= groupSettings.spamThreshold;
+        const isProfanityViolation = shouldCheckProfanity && profanityResult.severity >= groupSettings.profanityThreshold;
+        
+        if (isSpamViolation || isProfanityViolation) {
             // 1. Delete the offending message.
             await deleteMessage(chat.id, message_id);
 
-            // 2. Prepare the log data for the strike.
+            // 2. Prepare the log data for the strike (prioritize spam over profanity for logging)
+            const violationType = isSpamViolation ? 'SPAM' : 'PROFANITY';
+            const primaryScore = isSpamViolation ? spamResult.score : profanityResult.severity;
             const logData = {
                 type: 'AUTO',
+                violationType: violationType,
                 timestamp: new Date().toISOString(),
                 user: from,
                 messageExcerpt: text.substring(0, 100),
-                classificationScore: finalScore,
+                classificationScore: primaryScore,
+                spamScore: spamResult.score,
+                profanityScore: profanityResult.severity,
+                profanityType: profanityResult.type || 'unknown',
             };
 
             // 3. Record the strike in the database.
             const newStrikeCount = await db.recordStrike(chat.id.toString(), from.id.toString(), logData);
-            logger.info(`User ${from.id} in chat ${chat.id} committed strike #${newStrikeCount}.`);
+            logger.info(`User ${from.id} in chat ${chat.id} committed ${violationType} strike #${newStrikeCount}.`);
 
-            // 4. Apply the appropriate penalty and pass the logData for more detailed alerts.
+            // 4. Apply the appropriate penalty with updated logData for more detailed alerts.
             await applyPenalty(chat.id, from, newStrikeCount, groupSettings, logData);
         }
     } catch (error) {
@@ -130,11 +152,15 @@ async function applyPenalty(chatId, user, strikeCount, settings, logData) {
             const escapedName = escapeMarkdownV2(user.first_name);
             const userTag = `[${escapedName}](tg://user?id=${user.id})`;
 
-            const messageParts = settings.warningMessage.split('{user}');
+            // Choose appropriate warning message based on violation type
+            const violationType = logData?.violationType || 'SPAM';
+            const warningMessage = violationType === 'PROFANITY' ? settings.profanityWarningMessage : settings.warningMessage;
+            const messageParts = warningMessage.split('{user}');
             const strikePart = ` \\(Strike ${strikeCount}\\)`;
             
             // Add the reason (message excerpt) if available
-            const reason = logData ? ` for a message starting with: "*${escapeMarkdownV2(logData.messageExcerpt)}*"` : '';
+            const violationEmoji = violationType === 'PROFANITY' ? '🤬' : '📢';
+            const reason = logData ? ` for ${violationEmoji} ${violationType.toLowerCase()}: "*${escapeMarkdownV2(logData.messageExcerpt)}*"` : '';
 
             let finalMessage = escapeMarkdownV2(messageParts[0]);
             if (messageParts.length > 1) {

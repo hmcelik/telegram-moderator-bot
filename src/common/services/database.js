@@ -407,3 +407,78 @@ export const getGroupStats = async (groupId, startDate, endDate) => {
         throw error;
     }
 };
+
+/**
+ * Get total count of unique users across all groups
+ */
+export const getTotalUsersCount = async () => {
+    try {
+        const result = await db.get('SELECT COUNT(DISTINCT userId) as count FROM users');
+        return result?.count || 0;
+    } catch (error) {
+        logger.error('Error getting total users count:', error);
+        throw error;
+    }
+};
+
+/**
+ * Get total count of active strikes across all groups
+ */
+export const getTotalStrikesCount = async () => {
+    try {
+        const result = await db.get('SELECT SUM(count) as total FROM strikes WHERE count > 0');
+        return result?.total || 0;
+    } catch (error) {
+        logger.error('Error getting total strikes count:', error);
+        throw error;
+    }
+};
+
+/**
+ * Get total deletions today across all groups (for super admin)
+ */
+export const getGlobalDeletionsToday = async () => {
+    try {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const tomorrow = new Date(today);
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        
+        const result = await db.get(`
+            SELECT COUNT(*) as count 
+            FROM audit_log 
+            WHERE timestamp >= ? AND timestamp < ?
+            AND logData LIKE '%AUTO%'
+        `, today.toISOString(), tomorrow.toISOString());
+        
+        return result?.count || 0;
+    } catch (error) {
+        logger.error('Error getting global deletions today:', error);
+        throw error;
+    }
+};
+
+/**
+ * Get top groups by deletion count
+ */
+export const getTopGroupsByDeletions = async (limit = 5) => {
+    try {
+        const result = await db.all(`
+            SELECT 
+                g.chatId,
+                g.chatTitle,
+                COUNT(al.id) as deletions
+            FROM groups g
+            LEFT JOIN audit_log al ON g.chatId = al.chatId 
+                AND al.logData LIKE '%AUTO%'
+            GROUP BY g.chatId, g.chatTitle
+            ORDER BY deletions DESC
+            LIMIT ?
+        `, limit);
+        
+        return result || [];
+    } catch (error) {
+        logger.error('Error getting top groups by deletions:', error);
+        throw error;
+    }
+};

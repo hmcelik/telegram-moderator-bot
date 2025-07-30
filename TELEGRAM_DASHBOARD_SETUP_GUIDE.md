@@ -36,13 +36,13 @@ This guide provides a comprehensive setup for developing a **Telegram Moderator 
 
 ### Key Features
 - ✅ **Real-time Group Management**
-- ✅ **AI-powered Moderation Settings**
+- ✅ **AI-powered Moderation Settings** 
 - ✅ **Advanced Statistics Dashboard** 
 - ✅ **User & Admin Management**
+- ✅ **Super Admin Controls** - Global bot management
 - ✅ **Cross-platform Compatibility**
 - ✅ **Production-ready Security**
-
----
+- ✅ **Role-based Command System**---
 
 ## 🔧 Prerequisites
 
@@ -137,16 +137,32 @@ Create `.env` file with the following configuration:
 
 ```env
 # Telegram Bot Configuration
-TELEGRAM_BOT_TOKEN=your_bot_token_from_botfather
-TELEGRAM_BOT_USERNAME=your_bot_username
+BOT_TOKEN=your_bot_token_from_botfather
+TELEGRAM_BOT_SECRET=your_bot_secret
+
+# Super Admin Configuration
+ADMIN_USER_ID=your_telegram_user_id
 
 # Database Configuration
 DATABASE_PATH=./moderator.db
 
 # API Configuration
 API_PORT=3000
-API_BASE_URL=http://localhost:3000
+DEV_SERVER_PORT=8080
 NODE_ENV=development
+
+# Authentication
+JWT_SECRET=your_jwt_secret_key
+
+# AI Configuration
+OPENAI_API_KEY=your_openai_api_key
+
+# Logging
+LOG_LEVEL=info
+
+# Maintenance
+MAINTENANCE_MODE=false
+```
 
 # JWT Configuration
 JWT_SECRET=your_super_secret_jwt_key_change_this_in_production
@@ -234,6 +250,30 @@ webapp - Open Mini App
 - Invite users
 - Manage topics (for supergroups)
 ```
+
+### 4. Super Admin Configuration
+
+To enable super admin functionality, you need to configure your Telegram user ID:
+
+#### Get Your Telegram User ID
+1. **Message [@userinfobot](https://t.me/userinfobot)** on Telegram
+2. **Copy your user ID** (e.g., 123456789)
+3. **Add to environment variables**:
+   ```env
+   ADMIN_USER_ID=123456789
+   ```
+
+#### Super Admin Features
+Once configured, you'll have access to:
+
+- **Global Statistics** (`/globalstats`) - View bot usage across all groups
+- **Maintenance Mode** (`/maintenance on|off`) - Toggle maintenance mode
+- **Broadcasting** (`/broadcast <message>`) - Send announcements to all groups
+- **Force Updates** (`/forceupdate`) - Refresh bot configurations
+- **Cache Management** (`/clearcache`) - Clear all cached data
+
+#### Command Registration
+Super admin commands are automatically registered for your user ID when the bot starts. They work in both private chats and groups.
 
 ---
 
@@ -1289,39 +1329,198 @@ const apiResponse = await fetch('/api/v1/webapp/user/profile', {
 
 ---
 
+## 🚀 Development Workflow
+
+### 1. Enhanced Development Scripts
+
+The project includes optimized npm scripts for efficient development:
+
+```bash
+# Bot Development (with auto-reload)
+npm run dev              # Start bot with nodemon
+
+# API Development (with auto-reload)  
+npm run dev:api          # Start API server with nodemon
+
+# Examples Development (with auto-reload)
+npm run dev:examples     # Start HTML examples server with nodemon
+
+# Production Commands
+npm start               # Start bot (production)
+npm run start:api       # Start API server (production)
+npm run start:dev-server # Start examples server (production)
+
+# Testing
+npm test               # Run all tests with Vitest
+npm run test:watch     # Run tests in watch mode
+```
+
+### 2. Multi-Service Development Setup
+
+For optimal development experience, run all services simultaneously:
+
+```bash
+# Terminal 1: Bot Service
+npm run dev
+
+# Terminal 2: API Service  
+npm run dev:api
+
+# Terminal 3: Examples Service
+npm run dev:examples
+
+# Terminal 4: Testing (Optional)
+npm run test:watch
+
+# Terminal 5: Ngrok (for external testing)
+ngrok http 3000
+```
+
+### 3. Super Admin Development
+
+To test super admin functionality during development:
+
+```bash
+# 1. Set your Telegram user ID in .env
+ADMIN_USER_ID=your_telegram_user_id
+
+# 2. Start bot in development mode
+npm run dev
+
+# 3. Test super admin commands in Telegram:
+/globalstats        # View global bot statistics
+/maintenance on     # Enable maintenance mode  
+/broadcast Hello!   # Send to all groups
+/forceupdate       # Refresh configurations
+/clearcache        # Clear all caches
+
+# 4. Check logs for command execution
+# Logs will show super admin validation and execution
+```
+
+### 4. API Development & Testing
+
+```bash
+# Start API in development mode
+npm run dev:api
+
+# Test endpoints with curl:
+curl http://localhost:3000/api/v1/webapp/health
+
+# Test authentication:
+curl -X POST http://localhost:3000/api/v1/webapp/auth \
+  -H "X-Telegram-Init-Data: mock_data" \
+  -H "Content-Type: application/json"
+
+# Access Swagger documentation:
+# http://localhost:3000/api/docs
+```
+
+### 5. Database Development
+
+```bash
+# View database contents during development:
+sqlite3 moderator.db ".tables"
+sqlite3 moderator.db "SELECT * FROM groups;"
+sqlite3 moderator.db "SELECT * FROM audit_log ORDER BY timestamp DESC LIMIT 10;"
+
+# Reset database (careful in production):
+rm moderator.db
+npm run dev  # Will recreate database
+```
+
+### 6. Live Development Workflow
+
+1. **Start all services** using the multi-service setup above
+2. **Make code changes** - nodemon will auto-reload services
+3. **Test changes immediately** in Telegram or via API
+4. **Check logs** in respective terminals for debugging
+5. **Run tests** to ensure no regressions
+6. **Use ngrok** for testing external integrations
+
+---
+
 ## 🧪 Testing Strategy
 
 ### 1. Unit Tests
 
-```javascript
-// Run unit tests
+```bash
+# Run all tests (152 tests across 15 suites)
 npm test
 
-// Test specific modules
-npm test -- --run src/api/controllers/webAppController.test.js
-npm test -- --run src/bot/handlers/commandHandler.test.js
+# Run tests in watch mode
+npm run test:watch
+
+# Run specific test files
+npm test __tests__/api/webapp.test.js
+npm test __tests__/bot/commandHandler.test.js
+npm test __tests__/database/performance.test.js
+
+# Run tests with coverage
+npm test -- --coverage
 ```
 
-### 2. Integration Tests
+### 2. Test Categories
 
-```javascript
-// Test API endpoints
-npm test -- --run __tests__/integration/e2e.test.js
+#### API Tests (`__tests__/api/`)
+- ✅ **webapp.test.js** - WebApp authentication and endpoints
+- ✅ **enhanced-auth.test.js** - Login widget authentication
+- ✅ **groups.test.js** - Group management endpoints
+- ✅ **security.test.js** - Security middleware and rate limiting
+- ✅ **middleware.test.js** - Authentication middleware
 
-// Test authentication flow
-npm test -- --run __tests__/api/enhanced-auth.test.js
+#### Bot Tests (`__tests__/bot/`)
+- ✅ **commandHandler.test.js** - All bot commands (public, admin, super admin)
+- ✅ **callbackHandler.test.js** - Keyboard callbacks and menu navigation
+- ✅ **messageHandler.test.js** - Message processing and moderation
+
+#### Database Tests (`__tests__/database/`)
+- ✅ **database.test.js** - Core database operations
+- ✅ **performance.test.js** - Database performance and optimization
+
+#### Integration Tests (`__tests__/integration/`)
+- ✅ **e2e.test.js** - End-to-end workflow testing
+
+#### Service Tests (`__tests__/services/`)
+- ✅ **config.test.js** - Configuration management
+- ✅ **nlp.test.js** - NLP service functionality
+
+### 3. Integration Tests
+
+```bash
+# Run integration tests
+npm test __tests__/integration/e2e.test.js
+
+# Test authentication flows
+npm test __tests__/api/enhanced-auth.test.js
+
+# Test API security
+npm test __tests__/api/security.test.js
+
+# Test super admin functionality
+npm test __tests__/bot/commandHandler.test.js
 ```
 
-### 3. Manual Testing Checklist
+### 4. Manual Testing Checklist
+
+#### Bot Command Testing
+- [ ] **Public commands** work in groups (`/help`, `/mystrikes`)
+- [ ] **Admin commands** work for admins (`/status`, `/register`, strike commands)
+- [ ] **Super admin commands** work for configured user (`/globalstats`, `/maintenance`, etc.)
+- [ ] **Command registration** based on user roles
+- [ ] **Error handling** for unauthorized users
+- [ ] **Private chat** functionality for super admin commands
 
 #### Mini App Testing
 - [ ] App loads correctly in Telegram
-- [ ] Authentication works
+- [ ] Authentication works with real initData
 - [ ] All API calls succeed
 - [ ] UI adapts to Telegram theme
 - [ ] Main button functions
 - [ ] Back button handling
 - [ ] Error handling works
+- [ ] Group settings can be modified
+- [ ] Statistics display correctly
 
 #### External App Testing
 - [ ] Login widget functions
@@ -1331,14 +1530,17 @@ npm test -- --run __tests__/api/enhanced-auth.test.js
 - [ ] Cross-browser compatibility
 - [ ] Token persistence
 - [ ] Logout functionality
+- [ ] Mock data works for testing
 
 #### API Testing
 - [ ] All endpoints respond correctly
 - [ ] Authentication middleware works
-- [ ] Rate limiting functions
+- [ ] Rate limiting functions properly
 - [ ] CORS headers correct
-- [ ] Error responses proper
+- [ ] Error responses proper format
 - [ ] Swagger documentation accurate
+- [ ] WebApp-specific endpoints work
+- [ ] Super admin data endpoints secured
 
 ### 4. Load Testing
 

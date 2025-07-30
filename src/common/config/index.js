@@ -27,8 +27,11 @@ const defaultConfig = {
     kickLevel: 3,
     banLevel: 0,
     spamThreshold: 0.85,
+    profanityThreshold: 0.7, // Threshold for profanity detection (0.0-1.0)
+    profanityEnabled: true, // Enable/disable profanity filtering
     muteDurationMinutes: 60,
     warningMessage: "⚠️ {user}, please avoid posting promotional/banned content.",
+    profanityWarningMessage: "⚠️ {user}, please keep your language appropriate and respectful.",
     warningMessageDeleteSeconds: 15, // How long the warning message stays in chat. 0 = forever.
     moderatorIds: [],
     whitelistedKeywords: [],
@@ -49,8 +52,8 @@ export const getGroupSettings = async (chatId) => {
     const settings = {};
     const keys = [
         'alertLevel', 'muteLevel', 'kickLevel', 'banLevel',
-        'spamThreshold', 'muteDurationMinutes', 'warningMessage',
-        'warningMessageDeleteSeconds', 'moderatorIds', 'keywordWhitelistBypass',
+        'spamThreshold', 'profanityThreshold', 'profanityEnabled', 'muteDurationMinutes', 'warningMessage',
+        'profanityWarningMessage', 'warningMessageDeleteSeconds', 'moderatorIds', 'keywordWhitelistBypass',
         'strikeExpirationDays', 'goodBehaviorDays'
     ];
 

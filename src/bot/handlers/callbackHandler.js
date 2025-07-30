@@ -8,6 +8,7 @@ import logger from '../../common/services/logger.js';
 import * as telegram from '../../common/services/telegram.js';
 import { mainKeyboard } from '../keyboards/mainMenu.js';
 import { aiSensitivityKeyboard } from '../keyboards/aiSensitivityMenu.js';
+import { profanityKeyboard } from '../keyboards/profanityMenu.js';
 import { penaltyLevelsKeyboard } from '../keyboards/penaltyLevelsMenu.js';
 import { miscKeyboard } from '../keyboards/miscMenu.js';
 import { whitelistKeyboard } from '../keyboards/whitelistMenu.js';
@@ -125,6 +126,10 @@ export const handleCallback = async (callbackQuery) => {
                     text = 'Configure AI sensitivity settings:';
                     keyboard = aiSensitivityKeyboard(groupSettings, targetChatId);
                     break;
+                case 'settings_profanity':
+                    text = 'Configure profanity filter settings:';
+                    keyboard = profanityKeyboard(groupSettings, targetChatId);
+                    break;
                 case 'settings_penalty_levels':
                     text = 'Configure penalty level settings:';
                     keyboard = penaltyLevelsKeyboard(groupSettings, targetChatId);
@@ -163,6 +168,15 @@ export const handleCallback = async (callbackQuery) => {
                     const updatedSettingsForBypass = await getGroupSettings(targetChatId);
                     text = 'Configure AI sensitivity settings:';
                     keyboard = aiSensitivityKeyboard(updatedSettingsForBypass, targetChatId);
+                    break;
+
+                case 'toggle_profanity':
+                    const newProfanityValue = !groupSettings.profanityEnabled;
+                    await updateSetting(targetChatId, 'profanityEnabled', newProfanityValue);
+                    await telegram.answerCallbackQuery(callbackQuery.id, { text: `Profanity Filter is now ${newProfanityValue ? 'ON' : 'OFF'}` });
+                    const updatedSettingsForProfanity = await getGroupSettings(targetChatId);
+                    text = 'Configure profanity filter settings:';
+                    keyboard = profanityKeyboard(updatedSettingsForProfanity, targetChatId);
                     break;
 
                 default:
@@ -261,6 +275,23 @@ bot.on('text', async (msg) => {
                          value = result.value;
                     }
                     break;
+                case 'set_profanity_threshold':
+                    result = handleFloatInput(text);
+                    if (result.valid && (result.value < 0 || result.value > 1)) {
+                         responseMessage = `❌ Invalid value. Profanity threshold must be between 0 and 1.`;
+                    } else {
+                         settingKey = 'profanityThreshold';
+                         value = result.value;
+                    }
+                    break;
+                case 'set_profanity_warning':
+                    settingKey = 'profanityWarningMessage';
+                    value = text;
+                    break;
+                case 'set_spam_warning':
+                    settingKey = 'warningMessage';
+                    value = text;
+                    break;
                 case 'set_mute_duration':
                     result = handleNumericInput(text, true); // Must be non-negative
                     settingKey = 'muteDurationMinutes';
@@ -322,10 +353,13 @@ bot.on('text', async (msg) => {
         const group = await db.getGroup(targetChatId);
         let menuText, keyboard;
 
-        if (['set_threshold', 'toggle_bypass'].includes(action)) {
+        if (['set_threshold', 'toggle_bypass', 'set_spam_warning'].includes(action)) {
             menuText = 'Configure AI sensitivity settings:';
             keyboard = aiSensitivityKeyboard(updatedSettings, targetChatId);
-        } else if (['set_mute_duration', 'set_warning_delete_seconds', 'set_warning_message', 'set_strike_expiration', 'set_good_behavior'].includes(action)) {
+        } else if (['set_profanity_threshold', 'set_profanity_warning', 'toggle_profanity'].includes(action)) {
+            menuText = 'Configure profanity filter settings:';
+            keyboard = profanityKeyboard(updatedSettings, targetChatId);
+        } else if (['set_mute_duration', 'set_warning_delete_seconds', 'set_strike_expiration', 'set_good_behavior'].includes(action)) {
             menuText = 'Configure miscellaneous settings:';
             keyboard = miscKeyboard(updatedSettings, targetChatId);
         } else if (action.startsWith('set_') && action.includes('level')) {

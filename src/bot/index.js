@@ -3,6 +3,7 @@
  * It initializes services, and sets up event listeners for multi-tenant operation.
  */
 
+import 'dotenv/config';
 import bot from '../common/services/telegram.js';
 import * as db from '../common/services/database.js';
 import { handleMessage } from './handlers/messageHandler.js';
@@ -31,6 +32,14 @@ const registerBotCommands = async () => {
             { command: 'auditlog', description: 'View recent moderation actions' }
         ];
 
+        const superAdminCommands = [
+            { command: 'globalstats', description: 'View global bot statistics' },
+            { command: 'maintenance', description: 'Toggle maintenance mode' },
+            { command: 'broadcast', description: 'Send message to all groups' },
+            { command: 'forceupdate', description: 'Force refresh configurations' },
+            { command: 'clearcache', description: 'Clear all cached data' }
+        ];
+
         // Set public commands (for everyone)
         await bot.setMyCommands(publicCommands, {
             scope: { type: 'default' }
@@ -40,6 +49,17 @@ const registerBotCommands = async () => {
         await bot.setMyCommands([...publicCommands, ...adminOnlyCommands], {
             scope: { type: 'all_chat_administrators' }
         });
+
+        // Set super admin commands (for specific user if configured)
+        const superAdminUserId = process.env.ADMIN_USER_ID;
+        if (superAdminUserId) {
+            await bot.setMyCommands([...publicCommands, ...adminOnlyCommands, ...superAdminCommands], {
+                scope: { type: 'chat', chat_id: parseInt(superAdminUserId) }
+            });
+            logger.info(`✅ Super admin commands registered for user ${superAdminUserId}.`);
+        } else {
+            logger.warn('⚠️ ADMIN_USER_ID not configured. Super admin commands not registered.');
+        }
 
         logger.info('✅ Bot commands registered successfully.');
     } catch (err) {

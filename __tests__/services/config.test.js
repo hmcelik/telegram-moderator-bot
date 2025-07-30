@@ -40,6 +40,9 @@ describe('Configuration Service', () => {
         whitelistedKeywords: undefined, // This comes from getWhitelistKeywords which is mocked
         keywordWhitelistBypass: true,
         warningMessage: '⚠️ {user}, please avoid posting promotional/banned content.',
+        profanityWarningMessage: '⚠️ {user}, please keep your language appropriate and respectful.',
+        profanityThreshold: 0.7,
+        profanityEnabled: true,
         warningMessageDeleteSeconds: 15,
         goodBehaviorDays: 7,
         muteDurationMinutes: 60,
