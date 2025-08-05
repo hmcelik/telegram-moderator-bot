@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ngrok API Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .result { margin: 20px 0; padding: 15px; border-radius: 5px; }
+        .success { background: #d4edda; border: 1px solid #c3e6cb; color: #155724; }
+        .error { background: #f8d7da; border: 1px solid #f5c6cb; color: #721c24; }
+        .info { background: #d1ecf1; border: 1px solid #bee5eb; color: #0c5460; }
+        button { padding: 10px 20px; margin: 5px; cursor: pointer; }
+        pre { background: #f8f9fa; padding: 10px; border-radius: 3px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <h1>Ngrok API Test for Telegram Moderator Bot</h1>
+    
+    <div>
+        <label for="apiUrl">API Base URL:</label>
+        <input type="text" id="apiUrl" value="https://minnow-good-mostly.ngrok-free.app" style="width: 400px;">
+    </div>
+    
+    <div style="margin: 20px 0;">
+        <button onclick="testHealth()">Test Health Endpoint</button>
+        <button onclick="testRoot()">Test Root Endpoint</button>
+        <button onclick="testWebAppHealth()">Test WebApp Health</button>
+        <button onclick="testNLPStatus()">Test NLP Status (Requires JWT)</button>
+    </div>
+    
+    <div id="results"></div>
+    
+    <script>
+        function addResult(title, content, type = 'info') {
+            const resultsDiv = document.getElementById('results');
+            const resultDiv = document.createElement('div');
+            resultDiv.className = `result ${type}`;
+            resultDiv.innerHTML = `<h3>${title}</h3>${content}`;
+            resultsDiv.appendChild(resultDiv);
+        }
+        
+        async function makeRequest(url, options = {}) {
+            const defaultOptions = {
+                method: 'GET',
+                mode: 'cors',
+                credentials: 'omit', // Don't send credentials for CORS
+                headers: {
+                    'Content-Type': 'application/json',
+                    'ngrok-skip-browser-warning': 'true'
+                }
+            };
+            
+            const finalOptions = {
+                ...defaultOptions,
+                ...options,
+                headers: {
+                    ...defaultOptions.headers,
+                    ...options.headers
+                }
+            };
+            
+            try {
+                console.log('Making request to:', url);
+                console.log('Options:', finalOptions);
+                
+                const response = await fetch(url, finalOptions);
+                
+                console.log('Response status:', response.status);
+                console.log('Response headers:', Object.fromEntries(response.headers.entries()));
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const data = await response.json();
+                return { success: true, data, status: response.status };
+            } catch (error) {
+                console.error('Request failed:', error);
+                
+                // More detailed error information
+                if (error.name === 'TypeError' && error.message.includes('fetch')) {
+                    return { 
+                        success: false, 
+                        error: `Network error: ${error.message}. This might be a CORS issue or the server is not reachable.`
+                    };
+                }
+                
+                return { success: false, error: error.message };
+            }
+        }
+        
+        async function testHealth() {
+            const apiUrl = document.getElementById('apiUrl').value;
+            const result = await makeRequest(`${apiUrl}/api/v1/health`);
+            
+            if (result.success) {
+                addResult('✅ Health Endpoint', `
+                    <p><strong>Status:</strong> ${result.data.status}</p>
+                    <p><strong>Service:</strong> ${result.data.service}</p>
+                    <p><strong>Version:</strong> ${result.data.version}</p>
+                    <p><strong>Timestamp:</strong> ${result.data.timestamp}</p>
+                    <pre>${JSON.stringify(result.data, null, 2)}</pre>
+                `, 'success');
+            } else {
+                addResult('❌ Health Endpoint Failed', `<p>Error: ${result.error}</p>`, 'error');
+            }
+        }
+        
+        async function testRoot() {
+            const apiUrl = document.getElementById('apiUrl').value;
+            const result = await makeRequest(`${apiUrl}/`);
+            
+            if (result.success) {
+                addResult('✅ Root Endpoint', `
+                    <p><strong>API Name:</strong> ${result.data.name}</p>
+                    <p><strong>Status:</strong> ${result.data.status}</p>
+                    <p><strong>Available Endpoints:</strong></p>
+                    <ul>
+                        ${Object.entries(result.data.endpoints).map(([key, value]) => 
+                            `<li><strong>${key}:</strong> ${value}</li>`
+                        ).join('')}
+                    </ul>
+                    <pre>${JSON.stringify(result.data, null, 2)}</pre>
+                `, 'success');
+            } else {
+                addResult('❌ Root Endpoint Failed', `<p>Error: ${result.error}</p>`, 'error');
+            }
+        }
+        
+        async function testWebAppHealth() {
+            const apiUrl = document.getElementById('apiUrl').value;
+            const result = await makeRequest(`${apiUrl}/api/v1/webapp/health`);
+            
+            if (result.success) {
+                addResult('✅ WebApp Health Endpoint', `
+                    <p><strong>Status:</strong> ${result.data.data.status}</p>
+                    <p><strong>Features:</strong></p>
+                    <ul>
+                        ${Object.entries(result.data.data.features).map(([key, value]) => 
+                            `<li><strong>${key}:</strong> ${value}</li>`
+                        ).join('')}
+                    </ul>
+                    <pre>${JSON.stringify(result.data, null, 2)}</pre>
+                `, 'success');
+            } else {
+                addResult('❌ WebApp Health Failed', `<p>Error: ${result.error}</p>`, 'error');
+            }
+        }
+        
+        async function testNLPStatus() {
+            const apiUrl = document.getElementById('apiUrl').value;
+            
+            // This endpoint requires JWT, so this will likely fail with 401
+            const result = await makeRequest(`${apiUrl}/api/v1/nlp/status`);
+            
+            if (result.success) {
+                addResult('✅ NLP Status Endpoint', `
+                    <p>Unexpected success! You might have authentication configured.</p>
+                    <pre>${JSON.stringify(result.data, null, 2)}</pre>
+                `, 'success');
+            } else {
+                if (result.error.includes('401')) {
+                    addResult('✅ NLP Status (Expected Auth Failure)', `
+                        <p>✅ Got expected 401 Unauthorized - this means the endpoint is working but requires authentication.</p>
+                        <p>Error: ${result.error}</p>
+                        <p>This is expected behavior for protected endpoints.</p>
+                    `, 'info');
+                } else {
+                    addResult('❌ NLP Status Failed', `<p>Error: ${result.error}</p>`, 'error');
+                }
+            }
+        }
+        
+        // Clear results
+        function clearResults() {
+            document.getElementById('results').innerHTML = '';
+        }
+        
+        // Add clear button
+        document.addEventListener('DOMContentLoaded', function() {
+            const clearBtn = document.createElement('button');
+            clearBtn.textContent = 'Clear Results';
+            clearBtn.onclick = clearResults;
+            clearBtn.style.marginLeft = '20px';
+            clearBtn.style.backgroundColor = '#6c757d';
+            clearBtn.style.color = 'white';
+            clearBtn.style.border = 'none';
+            clearBtn.style.borderRadius = '3px';
+            
+            const buttonContainer = document.querySelector('div[style*="margin: 20px 0"]');
+            buttonContainer.appendChild(clearBtn);
+        });
+    </script>
+</body>
+</html>

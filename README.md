@@ -78,8 +78,72 @@ cp .env.example .env
 - `GET /api/v1/webapp/health` - API health check
 
 ### Authentication
-- `POST /api/v1/webapp/auth` - Telegram WebApp authentication
-- `POST /api/v1/auth/login` - Enhanced login widget authentication
+
+The API supports **two authentication methods** for different use cases:
+
+#### 1. **Telegram Login Widget** (External Websites)
+For integrating with external websites and applications:
+
+- `POST /api/v1/auth/verify` - Universal authentication endpoint (supports both methods)
+- `POST /api/v1/auth/login-widget` - Dedicated Login Widget endpoint (returns JWT token)
+
+**Usage Example:**
+```javascript
+// Login Widget authentication data
+const loginData = {
+    id: 123456789,
+    first_name: "John",
+    last_name: "Doe", 
+    username: "johndoe",
+    photo_url: "https://...",
+    auth_date: 1672531200,
+    hash: "telegram_provided_hash"
+};
+
+const response = await fetch('/api/v1/auth/login-widget', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(loginData)
+});
+```
+
+#### 2. **Telegram Mini App** (WebApp initData)
+For Telegram Mini Apps and WebApps:
+
+- `POST /api/v1/webapp/auth` - WebApp authentication (returns JWT token)
+
+**Usage Example:**
+```javascript
+// Mini App initData authentication
+const initData = window.Telegram.WebApp.initData;
+
+const response = await fetch('/api/v1/webapp/auth', {
+    method: 'POST',
+    headers: { 
+        'Content-Type': 'application/json',
+        'X-Telegram-Init-Data': initData 
+    }
+});
+```
+
+#### Authentication Flow
+1. **Login Widget**: User clicks widget → Telegram validates → Your site receives user data → Send to API → Get JWT token
+2. **Mini App**: Mini App loads → Get initData → Send to API → Get JWT token
+
+#### Using JWT Tokens
+Once authenticated, include the JWT token in subsequent API requests:
+```javascript
+const response = await fetch('/api/v1/groups', {
+    headers: {
+        'Authorization': `Bearer ${jwtToken}`
+    }
+});
+```
+
+#### Examples & Integration
+- **HTML/JS Example**: `examples/login-widget-example.html`
+- **JS Client Library**: `examples/telegram-auth-client.js`
+- **React Integration**: `examples/react-telegram-auth.jsx`
 
 ### User Management
 - `GET /api/v1/webapp/user/profile` - Get user profile

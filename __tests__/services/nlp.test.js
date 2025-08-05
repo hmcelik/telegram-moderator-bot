@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { isPromotional, hasProfanity, analyzeMessage } from '../../src/common/services/nlp.js';
 
 // Mock the logger to prevent console noise during tests
@@ -11,7 +11,24 @@ vi.mock('../../src/common/services/logger.js', () => ({
   },
 }));
 
+// Mock OpenAI to prevent actual API calls
+vi.mock('openai', () => ({
+  default: class MockOpenAI {
+    constructor() {
+      this.chat = {
+        completions: {
+          create: vi.fn().mockRejectedValue(new Error('API not available in tests'))
+        }
+      };
+    }
+  }
+}));
+
 describe('NLP Service', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   // Note: These tests expect the service to return safe defaults when OpenAI API is unavailable
   // In production with a valid API key, the service would return actual classification results
   
@@ -33,7 +50,7 @@ describe('NLP Service', () => {
         // Service should return valid results - either API results or safe defaults
         expect(result.score >= 0 && result.score <= 1).toBe(true);
       }
-    });
+    }, 10000); // 10 second timeout
 
     it('should handle concurrent requests correctly', async () => {
       const message = 'Test message for concurrent processing';

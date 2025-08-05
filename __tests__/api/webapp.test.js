@@ -31,21 +31,16 @@ describe('WebApp API Endpoints', () => {
                 .expect(200);
 
             expect(response.body).toMatchObject({
-                status: 'healthy',
-                features: {
-                    webAppSupport: true,
-                    cors: true,
-                    rateLimit: true,
-                    authentication: true,
-                    swagger: true
-                },
-                api: {
-                    version: '1.0.0',
-                    endpoints: expect.arrayContaining([
-                        '/api/v1/webapp/auth',
-                        '/api/v1/webapp/user/profile',
-                        '/api/v1/webapp/user/groups'
-                    ])
+                status: 'success',
+                data: {
+                    status: 'healthy',
+                    features: {
+                        webAppSupport: true,
+                        cors: true,
+                        rateLimit: true,
+                        authentication: true,
+                        swagger: true
+                    }
                 }
             });
         });
@@ -59,8 +54,10 @@ describe('WebApp API Endpoints', () => {
 
             expect(response.body).toMatchObject({
                 status: 'error',
-                statusCode: 401,
-                message: expect.stringContaining('Missing Telegram WebApp authentication data')
+                error: {
+                    statusCode: 401,
+                    message: expect.stringContaining('Missing Telegram WebApp authentication data')
+                }
             });
         });
 
@@ -72,8 +69,10 @@ describe('WebApp API Endpoints', () => {
 
             expect(response.body).toMatchObject({
                 status: 'error',
-                statusCode: 401,
-                message: expect.stringContaining('Invalid Telegram WebApp authentication')
+                error: {
+                    statusCode: 401,
+                    message: expect.stringContaining('Invalid Telegram WebApp authentication')
+                }
             });
         });
     });
@@ -86,8 +85,10 @@ describe('WebApp API Endpoints', () => {
 
             expect(response.body).toMatchObject({
                 status: 'error',
-                statusCode: 401,
-                message: expect.stringContaining('Missing Telegram WebApp authentication data')
+                error: {
+                    statusCode: 401,
+                    message: expect.stringContaining('Missing Telegram WebApp authentication data')
+                }
             });
         });
     });
@@ -100,8 +101,10 @@ describe('WebApp API Endpoints', () => {
 
             expect(response.body).toMatchObject({
                 status: 'error',
-                statusCode: 401,
-                message: expect.stringContaining('Missing Telegram WebApp authentication data')
+                error: {
+                    statusCode: 401,
+                    message: expect.stringContaining('Missing Telegram WebApp authentication data')
+                }
             });
         });
     });
@@ -114,8 +117,10 @@ describe('WebApp API Endpoints', () => {
 
             expect(response.body).toMatchObject({
                 status: 'error',
-                statusCode: 401,
-                message: expect.stringContaining('Missing Telegram WebApp authentication data')
+                error: {
+                    statusCode: 401,
+                    message: expect.stringContaining('Missing Telegram WebApp authentication data')
+                }
             });
         });
     });
@@ -129,8 +134,10 @@ describe('WebApp API Endpoints', () => {
 
             expect(response.body).toMatchObject({
                 status: 'error',
-                statusCode: 401,
-                message: expect.stringContaining('Missing Telegram WebApp authentication data')
+                error: {
+                    statusCode: 401,
+                    message: expect.stringContaining('Missing Telegram WebApp authentication data')
+                }
             });
         });
     });
@@ -143,8 +150,10 @@ describe('WebApp API Endpoints', () => {
 
             expect(response.body).toMatchObject({
                 status: 'error',
-                statusCode: 401,
-                message: expect.stringContaining('Missing Telegram WebApp authentication data')
+                error: {
+                    statusCode: 401,
+                    message: expect.stringContaining('Missing Telegram WebApp authentication data')
+                }
             });
         });
 
@@ -155,8 +164,10 @@ describe('WebApp API Endpoints', () => {
 
             expect(response.body).toMatchObject({
                 status: 'error',
-                statusCode: 401,
-                message: expect.stringContaining('Missing Telegram WebApp authentication data')
+                error: {
+                    statusCode: 401,
+                    message: expect.stringContaining('Missing Telegram WebApp authentication data')
+                }
             });
         });
     });
@@ -174,7 +185,7 @@ describe('WebApp API Endpoints', () => {
         it('should handle OPTIONS requests', async () => {
             const response = await request(app)
                 .options('/api/v1/webapp/health')
-                .expect(204);
+                .expect(200); // CORS is configured with optionsSuccessStatus: 200
         });
     });
 

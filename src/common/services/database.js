@@ -277,27 +277,45 @@ export const getUser = (userId) => {
 };
 
 export const getUserAdminGroups = async (userId) => {
-    // This would typically require checking with Telegram API
-    // For now, return groups where user has been active as admin
-    return getDb().all(`
-        SELECT DISTINCT g.* 
-        FROM groups g 
-        INNER JOIN audit_log a ON g.chatId = a.chatId 
-        WHERE a.userId = ? 
-        ORDER BY g.chatTitle
-    `, userId.toString());
+    // Import here to avoid circular dependencies
+    const { getChatAdmins } = await import('./telegram.js');
+    
+    // Get all groups from database
+    const allGroups = await getDb().all('SELECT * FROM groups ORDER BY chatTitle');
+    const userAdminGroups = [];
+
+    // Check each group to see if user is an admin
+    for (const group of allGroups) {
+        try {
+            const admins = await getChatAdmins(group.chatId);
+            if (admins.includes(parseInt(userId))) {
+                userAdminGroups.push({
+                    id: group.chatId,
+                    title: group.chatTitle,
+                    type: 'group', // or 'supergroup' based on your data
+                    member_count: 0 // You might want to fetch this separately if needed
+                });
+            }
+        } catch (error) {
+            // Skip groups where admin info is unavailable (bot not in group, etc.)
+            console.warn(`Could not check admin status for group ${group.chatId}:`, error.message);
+        }
+    }
+    
+    return userAdminGroups;
 };
 
 export const isUserGroupAdmin = async (userId, groupId) => {
-    // Check if user has admin activity in this group
-    // In a real implementation, you'd verify with Telegram API
-    const activity = await getDb().get(`
-        SELECT COUNT(*) as count 
-        FROM audit_log 
-        WHERE userId = ? AND chatId = ?
-    `, userId.toString(), groupId);
+    // Import here to avoid circular dependencies
+    const { getChatAdmins } = await import('./telegram.js');
     
-    return activity && activity.count > 0;
+    try {
+        const admins = await getChatAdmins(groupId);
+        return admins.includes(parseInt(userId));
+    } catch (error) {
+        console.warn(`Could not check admin status for user ${userId} in group ${groupId}:`, error.message);
+        return false;
+    }
 };
 
 export const setWhitelistKeywords = async (chatId, keywords) => {

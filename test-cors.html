@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CORS Test</title>
+</head>
+<body>
+    <h1>CORS Test for Telegram Moderator Bot API</h1>
+    <div id="result"></div>
+    
+    <script>
+        async function testCORS() {
+            const resultDiv = document.getElementById('result');
+            
+            try {
+                // Test the health endpoint
+                const response = await fetch('http://localhost:3000/api/v1/health', {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    resultDiv.innerHTML = `
+                        <h2 style="color: green;">✅ CORS is working!</h2>
+                        <p><strong>Status:</strong> ${data.status}</p>
+                        <p><strong>Service:</strong> ${data.service}</p>
+                        <p><strong>Version:</strong> ${data.version}</p>
+                        <p><strong>Timestamp:</strong> ${data.timestamp}</p>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `<h2 style="color: orange;">⚠️ Response not OK: ${response.status}</h2>`;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `
+                    <h2 style="color: red;">❌ CORS Error</h2>
+                    <p>Error: ${error.message}</p>
+                    <p>This likely means CORS is not properly configured for this origin.</p>
+                `;
+            }
+        }
+        
+        // Test when page loads
+        window.onload = testCORS;
+    </script>
+</body>
+</html>

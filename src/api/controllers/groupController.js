@@ -1,26 +1,12 @@
 import { validationResult } from 'express-validator';
 import * as db from '../../common/services/database.js';
 import { getGroupSettings, updateSetting } from '../../common/config/index.js';
-import { getChatAdmins } from '../../common/services/telegram.js';
 import ApiError from '../utils/apiError.js';
 
 export const listGroups = async (req, res, next) => {
     try {
         const userId = req.user.id;
-        const allGroups = await db.getAllGroups();
-        const userAdminGroups = [];
-
-        for (const group of allGroups) {
-            try {
-                const admins = await getChatAdmins(group.chatId);
-                if (admins.includes(userId)) {
-                    userAdminGroups.push(group);
-                }
-            } catch (err) {
-                // Skip groups where admin info is unavailable
-            }
-        }
-
+        const userAdminGroups = await db.getUserAdminGroups(userId);
         res.status(200).json(userAdminGroups);
     } catch (error) {
         next(error);

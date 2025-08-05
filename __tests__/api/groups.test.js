@@ -28,6 +28,9 @@ vi.mock('../../src/common/services/database.js', () => ({
     { chatId: '-1001', chatTitle: 'Group A' },
     { chatId: '-1002', chatTitle: 'Group B' }
   ]),
+  getUserAdminGroups: vi.fn().mockResolvedValue([
+    { chatId: '-1001', chatTitle: 'Group A' }
+  ]),
 }));
 
 vi.mock('../../src/common/services/telegram.js', () => ({

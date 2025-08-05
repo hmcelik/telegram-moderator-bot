@@ -70,7 +70,7 @@ describe('Enhanced Auth API Endpoints', () => {
         .send({ initData });
 
       expect(response.status).toBe(401);
-      expect(response.body.message).toContain('Invalid Telegram Mini App data');
+      expect(response.body.error.message).toContain('Invalid Telegram Mini App data');
     });
   });
 
@@ -112,7 +112,7 @@ describe('Enhanced Auth API Endpoints', () => {
         .send(userData);
 
       expect(response.status).toBe(401);
-      expect(response.body.message).toContain('Invalid Telegram Login Widget data');
+      expect(response.body.error.message).toContain('Invalid Telegram Login Widget data');
     });
   });
 
@@ -148,7 +148,7 @@ describe('Enhanced Auth API Endpoints', () => {
         .send({});
 
       expect(response.status).toBe(400);
-      expect(response.body.message).toContain('Authentication data is missing');
+      expect(response.body.error.message).toContain('Authentication data is missing');
     });
 
     it('should return 400 for malformed initData', async () => {
@@ -157,7 +157,7 @@ describe('Enhanced Auth API Endpoints', () => {
         .send({ initData: 'invalid_format' });
 
       expect(response.status).toBe(400);
-      expect(response.body.message).toContain('Invalid initData format');
+      expect(response.body.error.message).toContain('Invalid initData format');
     });
   });
 });

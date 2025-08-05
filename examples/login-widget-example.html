@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Telegram Login Widget Example</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .auth-section {
+            margin: 20px 0;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+        }
+        .response {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 15px;
+            margin-top: 10px;
+            white-space: pre-wrap;
+            font-family: monospace;
+        }
+        .success {
+            background: #d4edda;
+            border-color: #c3e6cb;
+            color: #155724;
+        }
+        .error {
+            background: #f8d7da;
+            border-color: #f5c6cb;
+            color: #721c24;
+        }
+        .user-info {
+            display: none;
+            margin-top: 20px;
+            padding: 15px;
+            background: #e7f3ff;
+            border-radius: 5px;
+        }
+        .user-avatar {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            margin-right: 15px;
+            vertical-align: middle;
+        }
+        .api-test {
+            margin-top: 20px;
+            padding: 15px;
+            background: #f0f0f0;
+            border-radius: 5px;
+        }
+        button {
+            background: #0088cc;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #0077b3;
+        }
+        button:disabled {
+            background: #cccccc;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🤖 Telegram Moderator Bot - Login Widget Demo</h1>
+        
+        <div class="auth-section">
+            <h2>1. Telegram Login Widget</h2>
+            <p>Click the button below to authenticate with your Telegram account:</p>
+            
+            <!-- Telegram Login Widget -->
+            <script async src="https://telegram.org/js/telegram-widget.js?22" 
+                    data-telegram-login="YOUR_BOT_USERNAME" 
+                    data-size="large" 
+                    data-auth-url="#" 
+                    data-request-access="write"
+                    data-onauth="onTelegramAuth(user)">
+            </script>
+            
+            <!-- Manual Login Button (for testing) -->
+            <button onclick="simulateLogin()">🧪 Simulate Login (for testing)</button>
+            
+            <div id="authResponse" class="response" style="display: none;"></div>
+        </div>
+
+        <div class="user-info" id="userInfo">
+            <h3>👤 Authenticated User</h3>
+            <div id="userDisplay"></div>
+        </div>
+
+        <div class="api-test" id="apiTest" style="display: none;">
+            <h3>🔧 API Testing</h3>
+            <p>Test various API endpoints with your authentication token:</p>
+            
+            <button onclick="testHealthEndpoint()">Test Health Endpoint</button>
+            <button onclick="testUserGroups()">Get User Groups</button>
+            <button onclick="testNLPStatus()">Test NLP Status</button>
+            
+            <div id="apiResponse" class="response" style="display: none;"></div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE_URL = 'http://localhost:3000';
+        let authToken = null;
+
+        // This function is called by the Telegram Login Widget
+        function onTelegramAuth(user) {
+            console.log('Telegram auth callback:', user);
+            authenticateUser(user);
+        }
+
+        // Simulate login for testing purposes
+        function simulateLogin() {
+            const testUser = {
+                id: 123456789,
+                first_name: "Test",
+                last_name: "User",
+                username: "testuser",
+                photo_url: "https://via.placeholder.com/150",
+                auth_date: Math.floor(Date.now() / 1000),
+                hash: "test_hash_for_development"
+            };
+            
+            console.log('Simulating login with test user:', testUser);
+            authenticateUser(testUser);
+        }
+
+        // Authenticate user with the API
+        async function authenticateUser(userData) {
+            try {
+                showResponse('authResponse', 'Authenticating with Telegram data...', 'info');
+                
+                const response = await fetch(`${API_BASE_URL}/api/v1/auth/login-widget`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(userData)
+                });
+
+                const result = await response.json();
+                
+                if (response.ok && result.success) {
+                    authToken = result.token;
+                    showResponse('authResponse', `✅ Authentication successful!\n\nToken: ${result.token.substring(0, 20)}...\n\nUser: ${JSON.stringify(result.user, null, 2)}`, 'success');
+                    
+                    // Show user info
+                    displayUserInfo(result.user);
+                    
+                    // Show API testing section
+                    document.getElementById('apiTest').style.display = 'block';
+                } else {
+                    showResponse('authResponse', `❌ Authentication failed:\n${JSON.stringify(result, null, 2)}`, 'error');
+                }
+            } catch (error) {
+                showResponse('authResponse', `❌ Network error:\n${error.message}`, 'error');
+            }
+        }
+
+        // Display user information
+        function displayUserInfo(user) {
+            const userInfo = document.getElementById('userInfo');
+            const userDisplay = document.getElementById('userDisplay');
+            
+            userDisplay.innerHTML = `
+                ${user.photo_url ? `<img src="${user.photo_url}" alt="User Avatar" class="user-avatar">` : ''}
+                <strong>${user.first_name} ${user.last_name || ''}</strong>
+                ${user.username ? `(@${user.username})` : ''}
+                <br>
+                <small>User ID: ${user.id}</small>
+            `;
+            
+            userInfo.style.display = 'block';
+        }
+
+        // Test API endpoints
+        async function testHealthEndpoint() {
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/v1/health`);
+                const result = await response.json();
+                showResponse('apiResponse', `Health Check:\n${JSON.stringify(result, null, 2)}`, response.ok ? 'success' : 'error');
+            } catch (error) {
+                showResponse('apiResponse', `Health Check Error:\n${error.message}`, 'error');
+            }
+        }
+
+        async function testUserGroups() {
+            if (!authToken) {
+                showResponse('apiResponse', 'Please authenticate first!', 'error');
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/v1/groups`, {
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`
+                    }
+                });
+                const result = await response.json();
+                showResponse('apiResponse', `User Groups:\n${JSON.stringify(result, null, 2)}`, response.ok ? 'success' : 'error');
+            } catch (error) {
+                showResponse('apiResponse', `Groups Error:\n${error.message}`, 'error');
+            }
+        }
+
+        async function testNLPStatus() {
+            if (!authToken) {
+                showResponse('apiResponse', 'Please authenticate first!', 'error');
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/v1/nlp/status`, {
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`
+                    }
+                });
+                const result = await response.json();
+                showResponse('apiResponse', `NLP Status:\n${JSON.stringify(result, null, 2)}`, response.ok ? 'success' : 'error');
+            } catch (error) {
+                showResponse('apiResponse', `NLP Error:\n${error.message}`, 'error');
+            }
+        }
+
+        // Utility function to show responses
+        function showResponse(elementId, content, type = 'info') {
+            const element = document.getElementById(elementId);
+            element.textContent = content;
+            element.className = `response ${type}`;
+            element.style.display = 'block';
+        }
+
+        // Note: In a real implementation, replace 'YOUR_BOT_USERNAME' with your actual bot username
+        // and remove the simulate login function
+    </script>
+
+    <div style="margin-top: 30px; padding: 20px; background: #fff3cd; border-radius: 5px;">
+        <h3>📋 Setup Instructions</h3>
+        <ol>
+            <li><strong>Replace Bot Username:</strong> In the Telegram widget script tag, replace <code>YOUR_BOT_USERNAME</code> with your actual bot username.</li>
+            <li><strong>Domain Setup:</strong> Add your domain to the bot's allowed domains using BotFather's <code>/setdomain</code> command.</li>
+            <li><strong>HTTPS Required:</strong> Telegram Login Widget requires HTTPS in production (localhost works for development).</li>
+            <li><strong>CORS Configuration:</strong> Your domain should be added to the API's CORS allowed origins.</li>
+        </ol>
+        
+        <h4>🔧 For Development Testing:</h4>
+        <p>Use the "Simulate Login" button above to test the authentication flow without setting up the actual Telegram widget.</p>
+    </div>
+</body>
+</html>

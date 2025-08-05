@@ -3,14 +3,20 @@ import * as db from '../../common/services/database.js';
 import { getGroupSettings as getConfigGroupSettings } from '../../common/config/index.js';
 import logger from '../../common/services/logger.js';
 import ApiError from '../utils/apiError.js';
+import { ERROR_TYPES } from '../utils/errorTypes.js';
+import { asyncHandler, successResponse, handleDatabaseError } from '../utils/errorHelpers.js';
 
 /**
  * Authenticate Telegram WebApp user and return JWT token
  */
-export const authenticate = async (req, res, next) => {
+export const authenticate = asyncHandler(async (req, res) => {
+    const { telegramUser } = req;
+    
+    if (!telegramUser) {
+        throw ApiError.fromType(ERROR_TYPES.TELEGRAM_AUTH_FAILED, 'No Telegram user data found');
+    }
+    
     try {
-        const { telegramUser } = req;
-        
         // Ensure user is in our database
         await db.upsertUser({
             id: telegramUser.id,
@@ -19,91 +25,115 @@ export const authenticate = async (req, res, next) => {
             username: telegramUser.username || null,
             language_code: telegramUser.language_code || 'en'
         });
-
-        // Create a session token (JWT)
-        const token = tokenService.generateToken({ 
-            id: telegramUser.id,
-            type: 'webapp'
-        });
-
-        logger.info(`WebApp user authenticated: ${telegramUser.id}`);
-
-        res.status(200).json({
-            success: true,
-            message: 'Authentication successful',
-            token: token,
-            user: {
-                id: telegramUser.id,
-                first_name: telegramUser.first_name,
-                last_name: telegramUser.last_name,
-                username: telegramUser.username,
-                language_code: telegramUser.language_code
-            }
-        });
     } catch (error) {
-        logger.error('Error in authenticate:', error);
-        next(new ApiError(500, 'Authentication failed'));
+        throw handleDatabaseError(error);
     }
-};
+
+    // Create a session token (JWT)
+    const token = tokenService.generateToken({ 
+        id: telegramUser.id,
+        type: 'webapp'
+    });
+
+    logger.info('WebApp user authenticated', {
+        userId: telegramUser.id,
+        username: telegramUser.username
+    });
+
+    const userData = {
+        id: telegramUser.id,
+        first_name: telegramUser.first_name,
+        last_name: telegramUser.last_name,
+        username: telegramUser.username,
+        language_code: telegramUser.language_code
+    };
+
+    res.status(200).json(successResponse({
+        token,
+        user: userData
+    }, 'Authentication successful'));
+});
 
 /**
  * Get user profile information
  */
-export const getUserProfile = async (req, res, next) => {
+export const getUserProfile = asyncHandler(async (req, res) => {
+    const { telegramUser } = req;
+    
+    // Get user from database
+    let user;
     try {
-        const { telegramUser } = req;
-        
-        // Get user from database
-        const user = await db.getUser(telegramUser.id);
-        if (!user) {
-            return next(new ApiError(404, 'User not found'));
-        }
-
-        // Get user's admin groups
-        const adminGroups = await db.getUserAdminGroups(telegramUser.id);
-
-        res.status(200).json({
-            success: true,
-            data: {
-                id: user.id,
-                first_name: user.first_name,
-                last_name: user.last_name,
-                username: user.username,
-                language_code: user.language_code,
-                admin_groups_count: adminGroups.length,
-                created_at: user.created_at
-            }
-        });
+        user = await db.getUser(telegramUser.id);
     } catch (error) {
-        logger.error('Error in getUserProfile:', error);
-        next(new ApiError(500, 'Failed to get user profile'));
+        throw handleDatabaseError(error);
     }
-};
+    
+    if (!user) {
+        throw ApiError.fromType(ERROR_TYPES.USER_NOT_FOUND);
+    }
+
+    // Get user's admin groups
+    let adminGroups;
+    try {
+        adminGroups = await db.getUserAdminGroups(telegramUser.id);
+    } catch (error) {
+        throw handleDatabaseError(error);
+    }
+
+    const profileData = {
+        id: user.id,
+        first_name: user.first_name,
+        last_name: user.last_name,
+        username: user.username,
+        language_code: user.language_code,
+        admin_groups: adminGroups.map(group => ({
+            id: group.id,
+            title: group.title,
+            type: group.type
+        }))
+    };
+
+    res.status(200).json(successResponse(profileData, 'Profile retrieved successfully'));
+});
 
 /**
  * Get list of groups where user is admin
  */
-export const getUserGroups = async (req, res, next) => {
+export const getUserGroups = asyncHandler(async (req, res) => {
+    const { telegramUser } = req;
+    
+    let adminGroups;
     try {
-        const { telegramUser } = req;
-        
-        const adminGroups = await db.getUserAdminGroups(telegramUser.id);
-
-        res.status(200).json({
-            success: true,
-            data: adminGroups.map(group => ({
-                id: group.id,
-                title: group.title,
-                type: group.type,
-                member_count: group.member_count,
-                created_at: group.created_at
-            }))
-        });
+        adminGroups = await db.getUserAdminGroups(telegramUser.id);
     } catch (error) {
-        logger.error('Error in getUserGroups:', error);
-        next(new ApiError(500, 'Failed to get user groups'));
+        throw handleDatabaseError(error);
     }
-};
+
+    const groupsData = adminGroups.map(group => ({
+        id: group.id,
+        title: group.title,
+        type: group.type,
+        member_count: group.member_count || 0
+    }));
+
+    res.status(200).json(successResponse(groupsData, 'User groups retrieved successfully'));
+});
+
+/**
+ * Health check endpoint for WebApp
+ */
+export const healthCheck = asyncHandler(async (req, res) => {
+    res.status(200).json(successResponse({
+        status: 'healthy',
+        features: {
+            webAppSupport: true,
+            cors: true,
+            rateLimit: true,
+            authentication: true,
+            swagger: true
+        }
+    }, 'Service is healthy'));
+});
 
 /**
  * Get group settings
@@ -254,31 +284,4 @@ export const getGroupStats = async (req, res, next) => {
         logger.error('Error in getGroupStats:', error);
         next(new ApiError(500, 'Failed to get group statistics'));
     }
-};
-
-/**
- * Health check endpoint for WebApp
- */
-export const healthCheck = async (req, res) => {
-    res.status(200).json({
-        status: 'healthy',
-        timestamp: new Date().toISOString(),
-        features: {
-            webAppSupport: true,
-            cors: true,
-            rateLimit: true,
-            authentication: true,
-            swagger: true
-        },
-        api: {
-            version: '1.0.0',
-            endpoints: [
-                '/api/v1/webapp/auth',
-                '/api/v1/webapp/user/profile',
-                '/api/v1/webapp/user/groups',
-                '/api/v1/webapp/group/:groupId/settings',
-                '/api/v1/webapp/group/:groupId/stats'
-            ]
-        }
-    });
 };

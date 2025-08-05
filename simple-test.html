@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simple API Test</title>
+</head>
+<body>
+    <h1>Simple API Test</h1>
+    <button onclick="testAPI()">Test API</button>
+    <div id="result"></div>
+    
+    <script>
+        async function testAPI() {
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = 'Testing...';
+            
+            try {
+                console.log('Testing ngrok API...');
+                
+                // Test with the exact same configuration that should work
+                const response = await fetch('https://minnow-good-mostly.ngrok-free.app/api/v1/health', {
+                    method: 'GET',
+                    mode: 'cors',
+                    headers: {
+                        'ngrok-skip-browser-warning': 'true'
+                    }
+                });
+                
+                console.log('Response received:', response);
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    resultDiv.innerHTML = `
+                        <h2 style="color: green;">✅ Success!</h2>
+                        <pre>${JSON.stringify(data, null, 2)}</pre>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `
+                        <h2 style="color: red;">❌ HTTP Error</h2>
+                        <p>Status: ${response.status}</p>
+                        <p>Status Text: ${response.statusText}</p>
+                    `;
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                resultDiv.innerHTML = `
+                    <h2 style="color: red;">❌ Fetch Failed</h2>
+                    <p>Error: ${error.message}</p>
+                    <p>Error Type: ${error.name}</p>
+                    <p>This might be a CORS or network connectivity issue.</p>
+                `;
+            }
+        }
+    </script>
+</body>
+</html>

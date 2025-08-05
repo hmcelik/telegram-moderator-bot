@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard API Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .result { margin: 20px 0; padding: 15px; border-radius: 5px; }
+        .success { background: #d4edda; border: 1px solid #c3e6cb; color: #155724; }
+        .error { background: #f8d7da; border: 1px solid #f5c6cb; color: #721c24; }
+        pre { background: #f8f9fa; padding: 10px; border-radius: 3px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <h1>Dashboard API Test</h1>
+    <p>Testing API from your dashboard domain perspective</p>
+    
+    <div>
+        <button onclick="testHealthEndpoint()">Test Health</button>
+        <button onclick="testWithAuth()">Test Auth Endpoint</button>
+        <button onclick="testWebAppHealth()">Test WebApp Health</button>
+    </div>
+    
+    <div id="results"></div>
+    
+    <script>
+        const API_BASE = 'https://minnow-good-mostly.ngrok-free.app';
+        
+        function addResult(title, content, type = 'info') {
+            const resultsDiv = document.getElementById('results');
+            const resultDiv = document.createElement('div');
+            resultDiv.className = `result ${type}`;
+            resultDiv.innerHTML = `<h3>${title}</h3>${content}`;
+            resultsDiv.appendChild(resultDiv);
+        }
+        
+        async function makeAPICall(endpoint, options = {}) {
+            const url = `${API_BASE}${endpoint}`;
+            const defaultOptions = {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'ngrok-skip-browser-warning': 'true'
+                }
+            };
+            
+            const finalOptions = {
+                ...defaultOptions,
+                ...options,
+                headers: {
+                    ...defaultOptions.headers,
+                    ...(options.headers || {})
+                }
+            };
+            
+            console.log(`Making request to: ${url}`);
+            console.log('With options:', finalOptions);
+            
+            try {
+                const response = await fetch(url, finalOptions);
+                
+                console.log('Response status:', response.status);
+                console.log('Response ok:', response.ok);
+                
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}\\n${errorText}`);
+                }
+                
+                const data = await response.json();
+                return { success: true, data };
+            } catch (error) {
+                console.error('API call failed:', error);
+                return { 
+                    success: false, 
+                    error: error.message,
+                    type: error.name
+                };
+            }
+        }
+        
+        async function testHealthEndpoint() {
+            const result = await makeAPICall('/api/v1/health');
+            
+            if (result.success) {
+                addResult('✅ Health Endpoint Success', `
+                    <p><strong>Status:</strong> ${result.data.status}</p>
+                    <p><strong>Service:</strong> ${result.data.service}</p>
+                    <p><strong>Timestamp:</strong> ${result.data.timestamp}</p>
+                    <pre>${JSON.stringify(result.data, null, 2)}</pre>
+                `, 'success');
+            } else {
+                addResult('❌ Health Endpoint Failed', `
+                    <p><strong>Error:</strong> ${result.error}</p>
+                    <p><strong>Type:</strong> ${result.type}</p>
+                    ${result.type === 'TypeError' ? '<p><em>This usually indicates a CORS or network issue.</em></p>' : ''}
+                `, 'error');
+            }
+        }
+        
+        async function testWebAppHealth() {
+            const result = await makeAPICall('/api/v1/webapp/health');
+            
+            if (result.success) {
+                addResult('✅ WebApp Health Success', `
+                    <p><strong>Status:</strong> ${result.data.data.status}</p>
+                    <pre>${JSON.stringify(result.data, null, 2)}</pre>
+                `, 'success');
+            } else {
+                addResult('❌ WebApp Health Failed', `
+                    <p><strong>Error:</strong> ${result.error}</p>
+                    <p><strong>Type:</strong> ${result.type}</p>
+                `, 'error');
+            }
+        }
+        
+        async function testWithAuth() {
+            // This should fail with 401 but not with CORS error
+            const result = await makeAPICall('/api/v1/groups', {
+                headers: {
+                    'Authorization': 'Bearer fake-token'
+                }
+            });
+            
+            if (result.success) {
+                addResult('✅ Unexpected Auth Success', `
+                    <p>This shouldn't happen with a fake token</p>
+                    <pre>${JSON.stringify(result.data, null, 2)}</pre>
+                `, 'success');
+            } else {
+                if (result.error.includes('401')) {
+                    addResult('✅ Auth Endpoint (Expected 401)', `
+                        <p>Got expected 401 Unauthorized - CORS is working!</p>
+                        <p><strong>Error:</strong> ${result.error}</p>
+                    `, 'success');
+                } else {
+                    addResult('❌ Auth Endpoint Failed', `
+                        <p><strong>Error:</strong> ${result.error}</p>
+                        <p><strong>Type:</strong> ${result.type}</p>
+                    `, 'error');
+                }
+            }
+        }
+        
+        // Auto-run health test when page loads
+        window.addEventListener('load', () => {
+            setTimeout(testHealthEndpoint, 1000);
+        });
+    </script>
+</body>
+</html>
