@@ -1,4 +1,27 @@
 /**
+ * Gets the member count for a chat/group.
+ * @param {string|number} chatId - The ID of the chat.
+ * @returns {Promise<number>} The number of members in the chat, or 0 on failure.
+ */
+export const getChatMemberCount = async (chatId) => {
+    try {
+        // Try the newer API method first, then fall back to the older one
+        let count;
+        try {
+            count = await bot.getChatMemberCount(chatId);
+        } catch (e) {
+            // Fall back to the deprecated method if the new one fails
+            count = await bot.getChatMembersCount(chatId);
+        }
+        return count;
+    } catch (error) {
+        // Log more detailed error information
+        const errorMsg = error.response?.body?.description || error.message;
+        logger.warn(`Could not get member count for chat ${chatId}: ${errorMsg}`);
+        return 0;
+    }
+};
+/**
  * @fileoverview A wrapper service for the node-telegram-bot-api library.
  * This file centralizes all direct interactions with the Telegram Bot API,
  * providing simplified helper functions for common actions like sending messages,

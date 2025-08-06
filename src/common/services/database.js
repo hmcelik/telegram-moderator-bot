@@ -285,15 +285,28 @@ export const getUserAdminGroups = async (userId) => {
     const userAdminGroups = [];
 
     // Check each group to see if user is an admin
+    const { getChatMemberCount } = await import('./telegram.js');
     for (const group of allGroups) {
         try {
             const admins = await getChatAdmins(group.chatId);
             if (admins.includes(parseInt(userId))) {
+                let member_count = 0;
+                // Only try to get member count if we successfully got admin list
+                // This indicates the bot has access to this group
+                if (admins.length > 0) {
+                    try {
+                        member_count = await getChatMemberCount(group.chatId);
+                    } catch (err) {
+                        // Silently fail for member count - bot might not have permission
+                        // but can still manage the group if user is admin
+                        member_count = 0;
+                    }
+                }
                 userAdminGroups.push({
                     id: group.chatId,
                     title: group.chatTitle,
                     type: 'group', // or 'supergroup' based on your data
-                    member_count: 0 // You might want to fetch this separately if needed
+                    member_count
                 });
             }
         } catch (error) {
@@ -301,7 +314,6 @@ export const getUserAdminGroups = async (userId) => {
             console.warn(`Could not check admin status for group ${group.chatId}:`, error.message);
         }
     }
-    
     return userAdminGroups;
 };
 
@@ -342,6 +354,18 @@ export const getGroupStats = async (groupId, startDate, endDate) => {
     const dbInstance = getDb();
     
     try {
+        // Debug: Check if there are any audit log entries at all
+        const totalAuditEntries = await dbInstance.get(`
+            SELECT COUNT(*) as count FROM audit_log WHERE chatId = ?
+        `, groupId);
+        
+        const recentAuditEntries = await dbInstance.all(`
+            SELECT * FROM audit_log WHERE chatId = ? ORDER BY timestamp DESC LIMIT 5
+        `, groupId);
+        
+        console.log(`Debug: Total audit entries for group ${groupId}: ${totalAuditEntries?.count || 0}`);
+        console.log('Debug: Recent entries:', recentAuditEntries);
+        
         // Get basic statistics
         const totalMessages = await dbInstance.get(`
             SELECT COUNT(*) as count 
@@ -407,7 +431,7 @@ export const getGroupStats = async (groupId, startDate, endDate) => {
             LIMIT 5
         `, groupId, startDate.toISOString(), endDate.toISOString());
 
-        return {
+        const result = {
             totalMessages: totalMessages?.count || 0,
             flaggedMessages: flaggedMessages?.count || 0,
             deletedMessages: deletedMessages?.count || 0,
@@ -420,6 +444,9 @@ export const getGroupStats = async (groupId, startDate, endDate) => {
                 count: row.count
             }))
         };
+        
+        console.log(`Debug: Stats result for group ${groupId}:`, result);
+        return result;
     } catch (error) {
         logger.error('Error getting group stats:', error);
         throw error;
