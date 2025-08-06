@@ -377,7 +377,7 @@ export const getGroupStats = async (groupId, startDate, endDate) => {
             SELECT COUNT(*) as count 
             FROM audit_log 
             WHERE chatId = ? AND timestamp BETWEEN ? AND ? 
-            AND JSON_EXTRACT(logData, '$.action') IN ('flagged', 'deleted')
+            AND (JSON_EXTRACT(logData, '$.action') IN ('flagged', 'deleted') OR JSON_EXTRACT(logData, '$.violationType') IS NOT NULL)
         `, groupId, startDate.toISOString(), endDate.toISOString());
 
         const deletedMessages = await dbInstance.get(`

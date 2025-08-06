@@ -31,6 +31,7 @@ vi.mock('../../src/common/services/database.js', () => {
     removeStrike: vi.fn(),
     recordStrike: vi.fn().mockResolvedValue(1),
     resetStrikes: vi.fn(),
+    logManualAction: vi.fn(), // Add missing mock for the new logging functionality
   };
 
   return {
@@ -53,6 +54,7 @@ describe('End-to-End API and Bot Integration Test', () => {
     // ✅ Mock all telegram functions
     telegramService.deleteMessage = vi.fn();
     telegramService.restrictChatMember = vi.fn();
+    telegramService.muteUser = vi.fn(); // Add missing mock for muteUser
     telegramService.kickUser = vi.fn();
     telegramService.banUser = vi.fn();
     telegramService.sendMessage = vi.fn().mockResolvedValue({ message_id: 999 });

@@ -106,6 +106,19 @@ export const handleMessage = async (msg) => {
         if (isSpamViolation || isProfanityViolation) {
             // 1. Delete the offending message.
             await deleteMessage(chat.id, message_id);
+            
+            // Log the message deletion
+            await db.logManualAction(chat.id.toString(), from.id.toString(), {
+                type: 'AUTO',
+                action: 'deleted',
+                timestamp: new Date().toISOString(),
+                user: from,
+                messageExcerpt: text.substring(0, 100),
+                reason: 'Violation detected',
+                violationType: isSpamViolation ? 'SPAM' : 'PROFANITY',
+                spamScore: spamResult.score,
+                profanityScore: profanityResult.severity
+            });
 
             // 2. Prepare the log data for the strike (prioritize spam over profanity for logging)
             const violationType = isSpamViolation ? 'SPAM' : 'PROFANITY';
@@ -145,9 +158,46 @@ export const handleMessage = async (msg) => {
  */
 async function applyPenalty(chatId, user, strikeCount, settings, logData) {
     const actions = [
-        { level: settings.banLevel, name: 'BAN', execute: () => banUser(chatId, user.id) },
-        { level: settings.kickLevel, name: 'KICK', execute: () => kickUser(chatId, user.id) },
-        { level: settings.muteLevel, name: 'MUTE', execute: () => muteUser(chatId, user.id, settings.muteDurationMinutes) },
+        { level: settings.banLevel, name: 'BAN', execute: async () => {
+            await banUser(chatId, user.id);
+            // Log the ban action
+            await db.logManualAction(chatId.toString(), user.id.toString(), {
+                type: 'AUTO',
+                action: 'banned',
+                timestamp: new Date().toISOString(),
+                user: user,
+                strikeCount: strikeCount,
+                reason: 'Strike limit reached',
+                violationType: logData?.violationType || 'UNKNOWN'
+            });
+        }},
+        { level: settings.kickLevel, name: 'KICK', execute: async () => {
+            await kickUser(chatId, user.id);
+            // Log the kick action
+            await db.logManualAction(chatId.toString(), user.id.toString(), {
+                type: 'AUTO',
+                action: 'kicked',
+                timestamp: new Date().toISOString(),
+                user: user,
+                strikeCount: strikeCount,
+                reason: 'Strike limit reached',
+                violationType: logData?.violationType || 'UNKNOWN'
+            });
+        }},
+        { level: settings.muteLevel, name: 'MUTE', execute: async () => {
+            await muteUser(chatId, user.id, settings.muteDurationMinutes);
+            // Log the mute action
+            await db.logManualAction(chatId.toString(), user.id.toString(), {
+                type: 'AUTO',
+                action: 'muted',
+                timestamp: new Date().toISOString(),
+                user: user,
+                strikeCount: strikeCount,
+                reason: 'Strike limit reached',
+                muteDuration: settings.muteDurationMinutes,
+                violationType: logData?.violationType || 'UNKNOWN'
+            });
+        }},
         { level: settings.alertLevel, name: 'ALERT', execute: async () => {
             const escapedName = escapeMarkdownV2(user.first_name);
             const userTag = `[${escapedName}](tg://user?id=${user.id})`;
@@ -175,6 +225,17 @@ async function applyPenalty(chatId, user, strikeCount, settings, logData) {
             if (settings.warningMessageDeleteSeconds > 0) {
                 setTimeout(() => deleteMessage(chatId, sentMsg.message_id), settings.warningMessageDeleteSeconds * 1000);
             }
+            
+            // Log the alert/warning action
+            await db.logManualAction(chatId.toString(), user.id.toString(), {
+                type: 'AUTO',
+                action: 'warned',
+                timestamp: new Date().toISOString(),
+                user: user,
+                strikeCount: strikeCount,
+                reason: 'Strike warning',
+                violationType: logData?.violationType || 'UNKNOWN'
+            });
         }},
     ];
 
