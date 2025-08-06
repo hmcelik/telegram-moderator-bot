@@ -154,4 +154,87 @@ router.post('/verify', verifyTelegramAuth, authController.verify);
  */
 router.post('/login-widget', verifyTelegramAuth, authController.loginWidget);
 
+/**
+ * @swagger
+ * /api/v1/auth/refresh:
+ *   post:
+ *     summary: Refresh JWT token
+ *     description: Refresh an existing JWT token to extend its validity
+ *     tags: [Auth]
+ *     security:
+ *       - BearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Token refreshed successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: "Token refreshed successfully"
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     token:
+ *                       type: string
+ *                       description: New JWT token
+ *                     expiresAt:
+ *                       type: string
+ *                       format: date-time
+ *       401:
+ *         description: Invalid or expired token
+ */
+router.post('/refresh', authController.refreshToken);
+
+/**
+ * @swagger
+ * /api/v1/auth/verify-token:
+ *   get:
+ *     summary: Verify JWT token
+ *     description: Verify if the current JWT token is valid and return user info
+ *     tags: [Auth]
+ *     security:
+ *       - BearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Token is valid
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: "Token is valid"
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     valid:
+ *                       type: boolean
+ *                       example: true
+ *                     user:
+ *                       type: object
+ *                       properties:
+ *                         id:
+ *                           type: integer
+ *                         first_name:
+ *                           type: string
+ *                         username:
+ *                           type: string
+ *                     expiresAt:
+ *                       type: string
+ *                       format: date-time
+ *       401:
+ *         description: Invalid or expired token
+ */
+router.get('/verify-token', authController.verifyToken);
+
 export default router;

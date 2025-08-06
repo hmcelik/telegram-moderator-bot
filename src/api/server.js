@@ -11,6 +11,10 @@ import authRoutes from './routes/auth.js';
 import groupRoutes from './routes/groups.js';
 import webAppRoutes from './routes/webapp.js';
 import nlpRoutes from './routes/nlp.js';
+import strikeRoutes from './routes/strikes.js';
+import systemRoutes from './routes/system.js';
+import logsRoutes from './routes/logs.js';
+import * as systemController from './controllers/systemController.js';
 import errorResponder from './utils/errorResponder.js';
 import ApiError from './utils/apiError.js';
 import { ERROR_TYPES } from './utils/errorTypes.js';
@@ -129,10 +133,23 @@ const limiter = rateLimit({
     },
     standardHeaders: true,
     legacyHeaders: false,
-    // Skip rate limiting for health checks and docs
+    // Skip rate limiting for health checks and docs, and in development for localhost
     skip: (req) => {
         const skipPaths = ['/api/v1/health', '/api/docs', '/'];
-        return skipPaths.includes(req.path);
+        if (skipPaths.includes(req.path)) {
+            return true;
+        }
+        
+        // Skip rate limiting in development for localhost
+        if (process.env.NODE_ENV === 'development') {
+            const isLocalhost = req.ip === '127.0.0.1' || 
+                               req.ip === '::1' || 
+                               req.ip === '::ffff:127.0.0.1' ||
+                               req.hostname === 'localhost';
+            return isLocalhost;
+        }
+        
+        return false;
     },
     // Validate proxy headers only when behind a proxy
     validate: {
@@ -158,6 +175,17 @@ const authLimiter = rateLimit({
             timestamp: new Date().toISOString()
         }
     },
+    // Skip rate limiting in development for localhost
+    skip: (req) => {
+        if (process.env.NODE_ENV === 'development') {
+            const isLocalhost = req.ip === '127.0.0.1' || 
+                               req.ip === '::1' || 
+                               req.ip === '::ffff:127.0.0.1' ||
+                               req.hostname === 'localhost';
+            return isLocalhost;
+        }
+        return false;
+    },
     // Validate proxy headers only when behind a proxy
     validate: {
         xForwardedForHeader: trustProxy
@@ -179,13 +207,84 @@ const swaggerOptions = {
         info: {
             title: 'Telegram Moderator Bot API',
             version: '1.0.0',
-            description: 'API for Telegram Moderator Bot - supports Mini Apps and external integrations',
+            description: `
+# Telegram Moderator Bot API
+
+A comprehensive API for managing Telegram group moderation, supporting both Mini Apps and external integrations.
+
+## Features
+
+- **Authentication**: Supports Telegram Login Widget and Mini App authentication
+- **Group Management**: Manage group settings, view statistics, and monitor activity
+- **Strike System**: Automated and manual strike management with audit trails
+- **NLP Processing**: Spam and profanity detection with customizable thresholds
+- **Audit Logging**: Complete audit trail with filtering and export capabilities
+- **Real-time Monitoring**: Health checks and status monitoring
+
+## Authentication Methods
+
+1. **JWT Bearer Token**: For API access after authentication
+2. **Telegram WebApp**: Using X-Telegram-Init-Data header
+3. **Telegram Login Widget**: Standard Telegram authentication
+
+## Rate Limiting
+
+- General endpoints: 100 requests per 15 minutes
+- Authentication endpoints: 5 requests per 15 minutes
+- Development mode: No rate limiting for localhost
+
+## Support
+
+For issues and documentation, visit the project repository.
+            `,
+            contact: {
+                name: 'API Support',
+                url: 'https://github.com/hmcelik/telegram-moderator-bot'
+            },
+            license: {
+                name: 'MIT',
+                url: 'https://opensource.org/licenses/MIT'
+            }
         },
         servers: [
             {
                 url: process.env.API_BASE_URL || 'http://localhost:3000',
                 description: 'Development server',
             },
+            {
+                url: 'https://your-production-domain.com',
+                description: 'Production server',
+            },
+        ],
+        tags: [
+            {
+                name: 'System',
+                description: 'System health and information endpoints'
+            },
+            {
+                name: 'Auth',
+                description: 'Authentication endpoints for external websites'
+            },
+            {
+                name: 'WebApp',
+                description: 'Telegram Mini App specific endpoints'
+            },
+            {
+                name: 'Groups',
+                description: 'Group management and settings'
+            },
+            {
+                name: 'Strike Management',
+                description: 'User strike management and history'
+            },
+            {
+                name: 'Audit Log',
+                description: 'Audit trail and activity logging'
+            },
+            {
+                name: 'NLP',
+                description: 'Natural Language Processing and content analysis'
+            }
         ],
         components: {
             securitySchemes: {
@@ -193,14 +292,93 @@ const swaggerOptions = {
                     type: 'http',
                     scheme: 'bearer',
                     bearerFormat: 'JWT',
+                    description: 'JWT token obtained from authentication endpoints'
                 },
                 TelegramAuth: {
                     type: 'apiKey',
                     in: 'header',
                     name: 'X-Telegram-Init-Data',
-                    description: 'Telegram WebApp initData for authentication',
+                    description: 'Telegram WebApp initData for Mini App authentication'
                 },
             },
+            schemas: {
+                Error: {
+                    type: 'object',
+                    properties: {
+                        success: {
+                            type: 'boolean',
+                            example: false
+                        },
+                        error: {
+                            type: 'object',
+                            properties: {
+                                code: {
+                                    type: 'string',
+                                    example: 'VALIDATION_ERROR'
+                                },
+                                message: {
+                                    type: 'string',
+                                    example: 'Invalid request parameters'
+                                },
+                                statusCode: {
+                                    type: 'integer',
+                                    example: 400
+                                },
+                                timestamp: {
+                                    type: 'string',
+                                    format: 'date-time'
+                                }
+                            }
+                        }
+                    }
+                },
+                User: {
+                    type: 'object',
+                    properties: {
+                        id: {
+                            type: 'integer',
+                            example: 123456789
+                        },
+                        first_name: {
+                            type: 'string',
+                            example: 'John'
+                        },
+                        last_name: {
+                            type: 'string',
+                            example: 'Doe'
+                        },
+                        username: {
+                            type: 'string',
+                            example: 'johndoe'
+                        },
+                        language_code: {
+                            type: 'string',
+                            example: 'en'
+                        }
+                    }
+                },
+                Group: {
+                    type: 'object',
+                    properties: {
+                        id: {
+                            type: 'string',
+                            example: '-1001234567890'
+                        },
+                        title: {
+                            type: 'string',
+                            example: 'My Telegram Group'
+                        },
+                        type: {
+                            type: 'string',
+                            example: 'supergroup'
+                        },
+                        memberCount: {
+                            type: 'integer',
+                            example: 150
+                        }
+                    }
+                }
+            }
         },
         security: [
             {
@@ -233,33 +411,62 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(maintenanceCheck);
 
 // Root endpoint - API information
-app.get('/', (req, res) => {
-    res.status(200).json({
-        name: 'Telegram Moderator Bot API',
-        version: '1.0.0',
-        status: 'running',
-        timestamp: new Date().toISOString(),
-        endpoints: {
-            health: '/api/v1/health',
-            docs: '/api/docs',
-            auth: '/api/v1/auth',
-            groups: '/api/v1/groups',
-            webapp: '/api/v1/webapp',
-            nlp: '/api/v1/nlp'
-        },
-        documentation: `${req.protocol}://${req.get('host')}/api/docs`
-    });
-});
-
-// Global health check endpoint - accessible without CORS restrictions
-app.get('/api/v1/health', (req, res) => {
-    res.status(200).json({
-        status: 'healthy',
-        timestamp: new Date().toISOString(),
-        service: 'telegram-moderator-bot-api',
-        version: '1.0.0'
-    });
-});
+/**
+ * @swagger
+ * /:
+ *   get:
+ *     summary: API Information
+ *     description: Get basic information about the Telegram Moderator Bot API
+ *     tags: [System]
+ *     responses:
+ *       200:
+ *         description: API information retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 name:
+ *                   type: string
+ *                   example: "Telegram Moderator Bot API"
+ *                 version:
+ *                   type: string
+ *                   example: "1.0.0"
+ *                 status:
+ *                   type: string
+ *                   example: "running"
+ *                 timestamp:
+ *                   type: string
+ *                   format: date-time
+ *                 endpoints:
+ *                   type: object
+ *                   properties:
+ *                     health:
+ *                       type: string
+ *                       example: "/api/v1/health"
+ *                     docs:
+ *                       type: string
+ *                       example: "/api/docs"
+ *                     auth:
+ *                       type: string
+ *                       example: "/api/v1/auth"
+ *                     groups:
+ *                       type: string
+ *                       example: "/api/v1/groups"
+ *                     strikes:
+ *                       type: string
+ *                       example: "/api/v1/groups/{groupId}/users/{userId}/strikes"
+ *                     webapp:
+ *                       type: string
+ *                       example: "/api/v1/webapp"
+ *                     nlp:
+ *                       type: string
+ *                       example: "/api/v1/nlp"
+ *                 documentation:
+ *                   type: string
+ *                   example: "http://localhost:3000/api/docs"
+ */
+app.get('/', systemController.getApiInfo);
 
 // Handle OPTIONS requests for health endpoints explicitly
 app.options('/api/v1/health', (req, res) => {
@@ -272,10 +479,13 @@ app.options('/api/v1/health', (req, res) => {
 // Stricter rate limiting for auth endpoints
 app.use('/api/v1/auth', authLimiter);
 
+app.use('/api/v1', systemRoutes);
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/groups', groupRoutes);
+app.use('/api/v1/groups', strikeRoutes);
 app.use('/api/v1/webapp', webAppRoutes);
 app.use('/api/v1/nlp', nlpRoutes);
+app.use('/api/v1/logs', logsRoutes);
 
 // 404 handler for API endpoints
 app.use('/api', (req, res, next) => {

@@ -24,12 +24,54 @@ const router = express.Router();
  *               properties:
  *                 success:
  *                   type: boolean
- *                 token:
+ *                   example: true
+ *                 message:
  *                   type: string
- *                 user:
+ *                   example: "Authentication successful"
+ *                 data:
  *                   type: object
+ *                   properties:
+ *                     token:
+ *                       type: string
+ *                       description: JWT token for API access
+ *                       example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+ *                     user:
+ *                       type: object
+ *                       properties:
+ *                         id:
+ *                           type: integer
+ *                           example: 123456789
+ *                         first_name:
+ *                           type: string
+ *                           example: "John"
+ *                         last_name:
+ *                           type: string
+ *                           example: "Doe"
+ *                         username:
+ *                           type: string
+ *                           example: "johndoe"
+ *                         language_code:
+ *                           type: string
+ *                           example: "en"
  *       401:
  *         description: Authentication failed
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ *                 error:
+ *                   type: object
+ *                   properties:
+ *                     code:
+ *                       type: string
+ *                       example: "TELEGRAM_AUTH_FAILED"
+ *                     message:
+ *                       type: string
+ *                       example: "Invalid Telegram WebApp authentication"
  */
 router.post('/auth', verifyTelegramWebApp, webAppController.authenticate);
 
@@ -38,7 +80,7 @@ router.post('/auth', verifyTelegramWebApp, webAppController.authenticate);
  * /api/v1/webapp/user/profile:
  *   get:
  *     summary: Get user profile
- *     description: Get the current user's profile information
+ *     description: Get the current user's profile information including admin groups
  *     tags: [WebApp]
  *     security:
  *       - TelegramAuth: []
@@ -46,6 +88,53 @@ router.post('/auth', verifyTelegramWebApp, webAppController.authenticate);
  *     responses:
  *       200:
  *         description: User profile retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: "Profile retrieved successfully"
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: integer
+ *                       example: 123456789
+ *                     first_name:
+ *                       type: string
+ *                       example: "John"
+ *                     last_name:
+ *                       type: string
+ *                       example: "Doe"
+ *                     username:
+ *                       type: string
+ *                       example: "johndoe"
+ *                     language_code:
+ *                       type: string
+ *                       example: "en"
+ *                     admin_groups:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           id:
+ *                             type: string
+ *                             example: "-1001234567890"
+ *                           title:
+ *                             type: string
+ *                             example: "My Group"
+ *                           type:
+ *                             type: string
+ *                             example: "supergroup"
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: User not found
  */
 router.get('/user/profile', verifyTelegramWebApp, webAppController.getUserProfile);
 
@@ -62,6 +151,39 @@ router.get('/user/profile', verifyTelegramWebApp, webAppController.getUserProfil
  *     responses:
  *       200:
  *         description: Groups retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: "Groups retrieved successfully"
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: string
+ *                         example: "-1001234567890"
+ *                       title:
+ *                         type: string
+ *                         example: "My Telegram Group"
+ *                       type:
+ *                         type: string
+ *                         example: "supergroup"
+ *                       memberCount:
+ *                         type: integer
+ *                         example: 150
+ *                       settings:
+ *                         type: object
+ *                         description: Current moderation settings
+ *       401:
+ *         description: Unauthorized
  */
 router.get('/user/groups', verifyTelegramWebApp, webAppController.getUserGroups);
 

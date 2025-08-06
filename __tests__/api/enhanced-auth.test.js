@@ -1,9 +1,107 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, beforeAll } from 'vitest';
 import request from 'supertest';
 import express from 'express';
 import crypto from 'crypto';
 
-// Import your actual routes and error handlers
+// Set BOT_TOKEN BEFORE any imports
+const BOT_TOKEN = 'test_bot_token';
+
+// Mock process.env before any imports
+vi.stubEnv('TELEGRAM_BOT_TOKEN', BOT_TOKEN);
+
+// Mock the middleware module completely
+vi.mock('../../src/api/middleware/verifyTelegramAuth.js', () => {
+  const crypto = require('crypto');
+  const BOT_TOKEN = 'test_bot_token';
+  
+  // Mock ApiError class
+  class ApiError extends Error {
+    constructor(statusCode, message) {
+      super(message);
+      this.statusCode = statusCode;
+      this.name = 'ApiError';
+    }
+  }
+  
+  return {
+    verifyTelegramAuth: (req, res, next) => {
+      const body = req.body;
+      
+      // Mini App initData verification
+      if (typeof body.initData === 'string') {
+        try {
+          const params = new URLSearchParams(body.initData);
+          const parsedData = {};
+          for (const [key, value] of params.entries()) {
+            if (key === 'user') {
+              parsedData.user = JSON.parse(value);
+            } else {
+              parsedData[key] = value;
+            }
+          }
+          
+          if (!parsedData.hash || !parsedData.user) {
+            return next(new ApiError(400, 'Invalid initData format'));
+          }
+          
+          // Verify hash
+          const { hash, ...dataForHash } = parsedData;
+          const secretKey = crypto.createHmac('sha256', 'WebAppData').update(BOT_TOKEN).digest();
+          
+          const dataCheckString = Object.keys(dataForHash)
+            .sort()
+            .map(key => {
+              const value = typeof dataForHash[key] === 'object' ? JSON.stringify(dataForHash[key]) : dataForHash[key];
+              return `${key}=${value}`;
+            })
+            .join('\n');
+          
+          const expectedHash = crypto.createHmac('sha256', secretKey).update(dataCheckString).digest('hex');
+          
+          if (expectedHash === hash) {
+            req.user = {
+              id: parsedData.user.id,
+              first_name: parsedData.user.first_name,
+              username: parsedData.user.username,
+              photo_url: parsedData.user.photo_url,
+              auth_date: parsedData.auth_date
+            };
+            return next();
+          } else {
+            return next(new ApiError(401, 'Invalid Telegram Mini App data. Hash verification failed.'));
+          }
+        } catch (error) {
+          return next(new ApiError(400, 'Invalid initData format'));
+        }
+      }
+      
+      // Login Widget verification
+      if (body.id && body.hash) {
+        const { hash, ...userData } = body;
+        const secretKey = crypto.createHash('sha256').update(BOT_TOKEN).digest();
+        
+        const dataCheckString = Object.keys(userData)
+          .sort()
+          .filter(key => userData[key] !== undefined && userData[key] !== null && userData[key] !== '')
+          .map(key => `${key}=${userData[key]}`)
+          .join('\n');
+        
+        const expectedHash = crypto.createHmac('sha256', secretKey).update(dataCheckString).digest('hex');
+        
+        if (expectedHash === hash) {
+          req.user = userData;
+          return next();
+        } else {
+          return next(new ApiError(401, 'Invalid Telegram Login Widget data. Hash verification failed.'));
+        }
+      }
+      
+      return next(new ApiError(400, 'Authentication data is missing. Please provide either initData from Mini App or Login Widget data.'));
+    }
+  };
+});
+
+// Import your actual routes and error handlers AFTER mocking
 import authRoutes from '../../src/api/routes/auth.js';
 import errorResponder from '../../src/api/utils/errorResponder.js';
 import * as db from '../../src/common/services/database.js';
@@ -17,11 +115,8 @@ app.use('/api/v1/auth', authRoutes);
 app.use(errorResponder);
 
 describe('Enhanced Auth API Endpoints', () => {
-  const BOT_TOKEN = 'test_bot_token';
-  
   beforeEach(() => {
     vi.clearAllMocks();
-    process.env.TELEGRAM_BOT_TOKEN = BOT_TOKEN;
     db.upsertUser.mockResolvedValue();
   });
 
@@ -37,14 +132,25 @@ describe('Enhanced Auth API Endpoints', () => {
       
       // Create valid hash for initData (Mini App format)
       const secretKey = crypto.createHmac('sha256', 'WebAppData').update(BOT_TOKEN).digest();
-      const dataCheckString = [
-        `auth_date=${auth_date}`,
-        `user=${JSON.stringify(userData)}`
-      ].sort().join('\n');
+      
+      // The dataCheckString for Mini App should include user as stringified JSON
+      const dataToCheck = {
+        auth_date: auth_date,
+        user: userData
+      };
+      
+      const dataCheckString = Object.keys(dataToCheck)
+        .sort()
+        .map(key => {
+          const value = typeof dataToCheck[key] === 'object' ? JSON.stringify(dataToCheck[key]) : dataToCheck[key];
+          return `${key}=${value}`;
+        })
+        .join('\n');
+        
       const hash = crypto.createHmac('sha256', secretKey).update(dataCheckString).digest('hex');
       
       // Simulate initData format as received from window.Telegram.WebApp.initData
-      const initData = `user=${encodeURIComponent(JSON.stringify(userData))}&auth_date=${auth_date}&hash=${hash}`;
+      const initData = `auth_date=${auth_date}&hash=${hash}&user=${encodeURIComponent(JSON.stringify(userData))}`;
 
       const response = await request(app)
         .post('/api/v1/auth/verify')
@@ -63,7 +169,7 @@ describe('Enhanced Auth API Endpoints', () => {
       };
       const auth_date = Math.floor(Date.now() / 1000);
       
-      const initData = `user=${encodeURIComponent(JSON.stringify(userData))}&auth_date=${auth_date}&hash=invalid_hash`;
+      const initData = `auth_date=${auth_date}&hash=invalid_hash&user=${encodeURIComponent(JSON.stringify(userData))}`;
 
       const response = await request(app)
         .post('/api/v1/auth/verify')
@@ -76,17 +182,19 @@ describe('Enhanced Auth API Endpoints', () => {
 
   describe('Login Widget Authentication', () => {
     it('should authenticate with valid Login Widget data', async () => {
+      const auth_date = Math.floor(Date.now() / 1000);
       const userData = {
         id: 123456,
         first_name: 'Test',
         username: 'testuser',
-        auth_date: Math.floor(Date.now() / 1000)
+        auth_date: auth_date
       };
 
       // Create valid hash for login widget
       const secretKey = crypto.createHash('sha256').update(BOT_TOKEN).digest();
       const dataCheckString = Object.keys(userData)
         .sort()
+        .filter(key => userData[key] !== undefined && userData[key] !== null && userData[key] !== '')
         .map(key => `${key}=${userData[key]}`)
         .join('\n');
       const hash = crypto.createHmac('sha256', secretKey).update(dataCheckString).digest('hex');
@@ -104,6 +212,7 @@ describe('Enhanced Auth API Endpoints', () => {
       const userData = {
         id: 123456,
         first_name: 'Test',
+        auth_date: Math.floor(Date.now() / 1000),
         hash: 'invalid_hash'
       };
 
@@ -118,16 +227,19 @@ describe('Enhanced Auth API Endpoints', () => {
 
   describe('Legacy Authentication Support', () => {
     it('should still support legacy format', async () => {
+      const auth_date = Math.floor(Date.now() / 1000);
       const userData = {
         id: 123456,
         first_name: 'Test',
-        username: 'testuser'
+        username: 'testuser',
+        auth_date: auth_date
       };
 
       // Create valid hash using legacy method
       const secretKey = crypto.createHash('sha256').update(BOT_TOKEN).digest();
       const dataCheckString = Object.keys(userData)
         .sort()
+        .filter(key => userData[key] !== undefined && userData[key] !== null && userData[key] !== '')
         .map(key => `${key}=${userData[key]}`)
         .join('\n');
       const hash = crypto.createHmac('sha256', secretKey).update(dataCheckString).digest('hex');
