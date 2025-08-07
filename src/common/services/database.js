@@ -354,25 +354,23 @@ export const getGroupStats = async (groupId, startDate, endDate) => {
     const dbInstance = getDb();
     
     try {
-        // Count all scanned messages (total messages processed by bot) - new format
-        const totalMessagesNew = await dbInstance.get(`
+        // Count scanned messages - current approach (temporary until counter table)
+        const scannedMessages = await dbInstance.get(`
             SELECT COUNT(*) as count 
             FROM audit_log 
             WHERE chatId = ? AND timestamp BETWEEN ? AND ?
             AND JSON_EXTRACT(logData, '$.type') = 'SCANNED'
         `, groupId, startDate.toISOString(), endDate.toISOString());
 
-        // Fallback: count all entries if no SCANNED entries exist (backward compatibility)
-        const totalMessagesAll = await dbInstance.get(`
-            SELECT COUNT(*) as count 
-            FROM audit_log 
-            WHERE chatId = ? AND timestamp BETWEEN ? AND ?
-        `, groupId, startDate.toISOString(), endDate.toISOString());
+        // TODO: Replace above with efficient counter table query:
+        // const stats = await dbInstance.get(`
+        //     SELECT SUM(messages_scanned) as totalMessages
+        //     FROM message_stats 
+        //     WHERE chatId = ? AND date BETWEEN ? AND ?
+        // `, groupId, startDate.split('T')[0], endDate.split('T')[0]);
 
-        const totalScannedCount = totalMessagesNew?.count > 0 ? totalMessagesNew.count : totalMessagesAll?.count || 0;
-
-        // Count flagged messages by violation type - new format
-        const spamMessagesNew = await dbInstance.get(`
+        // Count flagged messages by violation type
+        const spamMessages = await dbInstance.get(`
             SELECT COUNT(*) as count 
             FROM audit_log 
             WHERE chatId = ? AND timestamp BETWEEN ? AND ? 
@@ -380,7 +378,7 @@ export const getGroupStats = async (groupId, startDate, endDate) => {
             AND JSON_EXTRACT(logData, '$.violationType') = 'SPAM'
         `, groupId, startDate.toISOString(), endDate.toISOString());
 
-        const profanityMessagesNew = await dbInstance.get(`
+        const profanityMessages = await dbInstance.get(`
             SELECT COUNT(*) as count 
             FROM audit_log 
             WHERE chatId = ? AND timestamp BETWEEN ? AND ? 
@@ -388,19 +386,18 @@ export const getGroupStats = async (groupId, startDate, endDate) => {
             AND JSON_EXTRACT(logData, '$.violationType') = 'PROFANITY'
         `, groupId, startDate.toISOString(), endDate.toISOString());
 
-        // Backward compatibility: count old format AUTO entries
-        const oldAutoEntries = await dbInstance.get(`
+        // Legacy compatibility: count old AUTO entries
+        const legacyAutoEntries = await dbInstance.get(`
             SELECT COUNT(*) as count 
             FROM audit_log 
             WHERE chatId = ? AND timestamp BETWEEN ? AND ? 
             AND JSON_EXTRACT(logData, '$.type') = 'AUTO'
-            AND JSON_EXTRACT(logData, '$.classificationScore') IS NOT NULL
         `, groupId, startDate.toISOString(), endDate.toISOString());
 
-        const spamCount = (spamMessagesNew?.count || 0) + (oldAutoEntries?.count || 0);
-        const profanityCount = profanityMessagesNew?.count || 0;
+        const spamCount = (spamMessages?.count || 0) + (legacyAutoEntries?.count || 0);
+        const profanityCount = profanityMessages?.count || 0;
 
-        // Count deleted messages
+        // Count deleted messages (new and legacy)
         const deletedMessagesNew = await dbInstance.get(`
             SELECT COUNT(*) as count 
             FROM audit_log 
@@ -408,8 +405,7 @@ export const getGroupStats = async (groupId, startDate, endDate) => {
             AND JSON_EXTRACT(logData, '$.action') = 'message_deleted'
         `, groupId, startDate.toISOString(), endDate.toISOString());
 
-        // Backward compatibility for deletions
-        const deletedMessagesOld = await dbInstance.get(`
+        const deletedMessagesLegacy = await dbInstance.get(`
             SELECT COUNT(*) as count 
             FROM audit_log 
             WHERE chatId = ? AND timestamp BETWEEN ? AND ? 
@@ -417,58 +413,32 @@ export const getGroupStats = async (groupId, startDate, endDate) => {
             AND JSON_EXTRACT(logData, '$.action') = 'deleted'
         `, groupId, startDate.toISOString(), endDate.toISOString());
 
-        const totalDeleted = (deletedMessagesNew?.count || 0) + (deletedMessagesOld?.count || 0);
+        const totalDeleted = (deletedMessagesNew?.count || 0) + (deletedMessagesLegacy?.count || 0);
 
-        // Count unique users affected by penalties - new format
-        const mutedUsersNew = await dbInstance.get(`
+        // Count unique users affected by penalties
+        const mutedUsers = await dbInstance.get(`
             SELECT COUNT(DISTINCT userId) as count 
             FROM audit_log 
             WHERE chatId = ? AND timestamp BETWEEN ? AND ? 
             AND JSON_EXTRACT(logData, '$.action') = 'user_muted'
         `, groupId, startDate.toISOString(), endDate.toISOString());
 
-        const kickedUsersNew = await dbInstance.get(`
+        const kickedUsers = await dbInstance.get(`
             SELECT COUNT(DISTINCT userId) as count 
             FROM audit_log 
             WHERE chatId = ? AND timestamp BETWEEN ? AND ? 
             AND JSON_EXTRACT(logData, '$.action') = 'user_kicked'
         `, groupId, startDate.toISOString(), endDate.toISOString());
 
-        const bannedUsersNew = await dbInstance.get(`
+        const bannedUsers = await dbInstance.get(`
             SELECT COUNT(DISTINCT userId) as count 
             FROM audit_log 
             WHERE chatId = ? AND timestamp BETWEEN ? AND ? 
             AND JSON_EXTRACT(logData, '$.action') = 'user_banned'
         `, groupId, startDate.toISOString(), endDate.toISOString());
 
-        // Backward compatibility for penalties
-        const mutedUsersOld = await dbInstance.get(`
-            SELECT COUNT(DISTINCT userId) as count 
-            FROM audit_log 
-            WHERE chatId = ? AND timestamp BETWEEN ? AND ? 
-            AND JSON_EXTRACT(logData, '$.action') = 'muted'
-        `, groupId, startDate.toISOString(), endDate.toISOString());
-
-        const kickedUsersOld = await dbInstance.get(`
-            SELECT COUNT(DISTINCT userId) as count 
-            FROM audit_log 
-            WHERE chatId = ? AND timestamp BETWEEN ? AND ? 
-            AND JSON_EXTRACT(logData, '$.action') = 'kicked'
-        `, groupId, startDate.toISOString(), endDate.toISOString());
-
-        const bannedUsersOld = await dbInstance.get(`
-            SELECT COUNT(DISTINCT userId) as count 
-            FROM audit_log 
-            WHERE chatId = ? AND timestamp BETWEEN ? AND ? 
-            AND JSON_EXTRACT(logData, '$.action') = 'banned'
-        `, groupId, startDate.toISOString(), endDate.toISOString());
-
-        const totalMuted = (mutedUsersNew?.count || 0) + (mutedUsersOld?.count || 0);
-        const totalKicked = (kickedUsersNew?.count || 0) + (kickedUsersOld?.count || 0);
-        const totalBanned = (bannedUsersNew?.count || 0) + (bannedUsersOld?.count || 0);
-
-        // Get average spam score from flagged messages (both formats)
-        const newSpamScores = await dbInstance.all(`
+        // Get average spam score from flagged messages
+        const spamScores = await dbInstance.all(`
             SELECT JSON_EXTRACT(logData, '$.spamScore') as score 
             FROM audit_log 
             WHERE chatId = ? AND timestamp BETWEEN ? AND ? 
@@ -476,7 +446,8 @@ export const getGroupStats = async (groupId, startDate, endDate) => {
             AND JSON_EXTRACT(logData, '$.spamScore') IS NOT NULL
         `, groupId, startDate.toISOString(), endDate.toISOString());
 
-        const oldSpamScores = await dbInstance.all(`
+        // Include legacy scores
+        const legacyScores = await dbInstance.all(`
             SELECT JSON_EXTRACT(logData, '$.classificationScore') as score 
             FROM audit_log 
             WHERE chatId = ? AND timestamp BETWEEN ? AND ? 
@@ -484,17 +455,17 @@ export const getGroupStats = async (groupId, startDate, endDate) => {
             AND JSON_EXTRACT(logData, '$.classificationScore') IS NOT NULL
         `, groupId, startDate.toISOString(), endDate.toISOString());
 
-        const allSpamScores = [
-            ...newSpamScores.map(row => parseFloat(row.score || 0)),
-            ...oldSpamScores.map(row => parseFloat(row.score || 0))
+        const allScores = [
+            ...spamScores.map(row => parseFloat(row.score || 0)),
+            ...legacyScores.map(row => parseFloat(row.score || 0))
         ].filter(score => score > 0);
 
-        const avgSpamScore = allSpamScores.length > 0 
-            ? allSpamScores.reduce((sum, score) => sum + score, 0) / allSpamScores.length 
+        const avgSpamScore = allScores.length > 0 
+            ? allScores.reduce((sum, score) => sum + score, 0) / allScores.length 
             : 0;
 
-        // Get top violation types (both formats)
-        const newViolationTypes = await dbInstance.all(`
+        // Get top violation types
+        const violationTypes = await dbInstance.all(`
             SELECT 
                 JSON_EXTRACT(logData, '$.violationType') as type, 
                 COUNT(*) as count 
@@ -503,60 +474,46 @@ export const getGroupStats = async (groupId, startDate, endDate) => {
             AND JSON_EXTRACT(logData, '$.type') = 'VIOLATION'
             AND JSON_EXTRACT(logData, '$.violationType') IS NOT NULL
             GROUP BY type
+            ORDER BY count DESC
+            LIMIT 5
         `, groupId, startDate.toISOString(), endDate.toISOString());
 
-        const oldViolationTypes = await dbInstance.all(`
-            SELECT 
-                CASE 
-                    WHEN JSON_EXTRACT(logData, '$.violationType') IS NOT NULL THEN JSON_EXTRACT(logData, '$.violationType')
-                    WHEN JSON_EXTRACT(logData, '$.classificationScore') > 0.5 THEN 'SPAM'
-                    ELSE 'UNKNOWN'
-                END as type, 
-                COUNT(*) as count 
-            FROM audit_log 
-            WHERE chatId = ? AND timestamp BETWEEN ? AND ? 
-            AND JSON_EXTRACT(logData, '$.type') = 'AUTO'
-            AND JSON_EXTRACT(logData, '$.classificationScore') IS NOT NULL
-            GROUP BY type
-        `, groupId, startDate.toISOString(), endDate.toISOString());
+        // Add legacy types
+        if (legacyAutoEntries?.count > 0) {
+            const existingSpam = violationTypes.find(v => v.type === 'SPAM');
+            if (existingSpam) {
+                existingSpam.count += legacyAutoEntries.count;
+            } else {
+                violationTypes.push({ type: 'SPAM', count: legacyAutoEntries.count });
+            }
+        }
 
-        // Combine and deduplicate violation types
-        const violationTypeMap = new Map();
-        [...newViolationTypes, ...oldViolationTypes].forEach(row => {
-            const type = row.type;
-            const count = violationTypeMap.get(type) || 0;
-            violationTypeMap.set(type, count + (row.count || 0));
-        });
+        const totalScanned = scannedMessages?.count || 0;
 
-        const topViolationTypes = Array.from(violationTypeMap.entries())
-            .map(([type, count]) => ({ type, count }))
-            .sort((a, b) => b.count - a.count)
-            .slice(0, 5);
-
-        const result = {
-            totalMessages: totalScannedCount,
+        return {
+            totalMessages: totalScanned,
             flaggedMessages: {
                 total: spamCount + profanityCount,
                 spam: spamCount,
                 profanity: profanityCount
             },
             deletedMessages: totalDeleted,
-            mutedUsers: totalMuted,
-            kickedUsers: totalKicked,
-            bannedUsers: totalBanned,
+            mutedUsers: mutedUsers?.count || 0,
+            kickedUsers: kickedUsers?.count || 0,
+            bannedUsers: bannedUsers?.count || 0,
             averageSpamScore: Math.round(avgSpamScore * 100) / 100,
-            topViolationTypes,
-            // Additional metrics
-            flaggedRate: totalScannedCount > 0 ? 
-                Math.round((spamCount + profanityCount) / totalScannedCount * 10000) / 100 : 0,
+            topViolationTypes: violationTypes.map(row => ({ 
+                type: row.type, 
+                count: row.count 
+            })).sort((a, b) => b.count - a.count),
+            flaggedRate: totalScanned > 0 ? 
+                Math.round((spamCount + profanityCount) / totalScanned * 10000) / 100 : 0,
             autoModerationEfficiency: {
-                messagesScanned: totalScannedCount,
+                messagesScanned: totalScanned,
                 violationsDetected: spamCount + profanityCount,
-                usersActioned: totalMuted + totalKicked + totalBanned
+                usersActioned: (mutedUsers?.count || 0) + (kickedUsers?.count || 0) + (bannedUsers?.count || 0)
             }
         };
-        
-        return result;
     } catch (error) {
         logger.error('Error getting group stats:', error);
         throw error;
