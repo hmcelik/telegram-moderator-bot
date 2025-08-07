@@ -1,328 +1,55 @@
-# API Endpoints Documentation
-
-## Telegram Moderator Bot API
-
-**Base URL:** `https://minnow-good-mostly.ngrok-free.app` (or your current ngrok URL)
-**Version:** 1.0.0
-
----
+# Telegram Moderator Bot API Endpoints
 
 ## Table of Contents
-
-1. [Health & Status Endpoints](#health--status-endpoints)
-2. [Authentication Endpoints](#authentication-endpoints)
-3. [Group Management Endpoints](#group-management-endpoints)
-4. [WebApp Endpoints](#webapp-endpoints)
-5. [NLP (Natural Language Processing) Endpoints](#nlp-natural-language-processing-endpoints)
-6. [Common Headers](#common-headers)
+1. [Overview](#overview)
+2. [Authentication](#authentication)
+3. [WebApp Endpoints](#webapp-endpoints)
+4. [Analytics Endpoints](#analytics-endpoints)
+5. [Groups Management](#groups-management)
+6. [Strike System](#strike-system)
 7. [Error Responses](#error-responses)
+8. [Data Schemas](#data-schemas)
 
----
+## Overview
 
-## Health & Status Endpoints
+The Telegram Moderator Bot provides a comprehensive REST API for managing group moderation, user analytics, and administrative functions. The API is built on OpenAPI 3.0 specification and provides both JWT-based authentication for web apps and Telegram authentication for native integrations.
 
-### 1. Global Health Check
+**Base URL**: `/api/v1`
+**Version**: 2.0.0
 
-**Endpoint:** `GET /api/v1/health`
-**Authentication:** None required
-**Description:** Check if the API server is running and healthy
+## Authentication
 
-#### Example Request:
-```bash
-curl -X GET "https://minnow-good-mostly.ngrok-free.app/api/v1/health" \
-  -H "ngrok-skip-browser-warning: true"
+The API supports two authentication methods:
+
+### JWT Bearer Authentication
+For web applications and external integrations:
+```
+Authorization: Bearer <jwt_token>
 ```
 
-#### Example Response:
-```json
-{
-  "status": "healthy",
-  "timestamp": "2025-08-04T22:07:47.248Z",
-  "service": "telegram-moderator-bot-api",
-  "version": "1.0.0"
-}
+### Telegram WebApp Authentication
+For Telegram WebApp integrations:
 ```
-
-### 2. Root API Information
-
-**Endpoint:** `GET /`
-**Authentication:** None required
-**Description:** Get API information and available endpoints
-
-#### Example Request:
-```bash
-curl -X GET "https://minnow-good-mostly.ngrok-free.app/" \
-  -H "ngrok-skip-browser-warning: true"
+Authorization: <telegram_initData>
 ```
-
-#### Example Response:
-```json
-{
-  "name": "Telegram Moderator Bot API",
-  "version": "1.0.0",
-  "status": "running",
-  "timestamp": "2025-08-04T22:02:23.920Z",
-  "endpoints": {
-    "health": "/api/v1/health",
-    "docs": "/api/docs",
-    "auth": "/api/v1/auth",
-    "groups": "/api/v1/groups",
-    "webapp": "/api/v1/webapp",
-    "nlp": "/api/v1/nlp"
-  },
-  "documentation": "https://minnow-good-mostly.ngrok-free.app/api/docs"
-}
-```
-
-### 3. WebApp Health Check
-
-**Endpoint:** `GET /api/v1/webapp/health`
-**Authentication:** None required
-**Description:** Check WebApp-specific health and features
-
-#### Example Request:
-```bash
-curl -X GET "https://minnow-good-mostly.ngrok-free.app/api/v1/webapp/health" \
-  -H "ngrok-skip-browser-warning: true"
-```
-
-#### Example Response:
-```json
-{
-  "success": true,
-  "data": {
-    "status": "healthy",
-    "features": {
-      "webAppSupport": true,
-      "cors": true,
-      "rateLimit": true,
-      "authentication": true,
-      "swagger": true
-    }
-  },
-  "message": "Service is healthy"
-}
-```
-
----
-
-## Authentication Endpoints
-
-### 1. Telegram Login Widget Authentication
-
-**Endpoint:** `POST /api/v1/auth/login-widget`
-**Authentication:** Telegram Login Widget data
-**Description:** Authenticate using Telegram Login Widget for external websites
-
-#### Example Request:
-```bash
-curl -X POST "https://minnow-good-mostly.ngrok-free.app/api/v1/auth/login-widget" \
-  -H "Content-Type: application/json" \
-  -H "ngrok-skip-browser-warning: true" \
-  -d '{
-    "id": 123456789,
-    "first_name": "John",
-    "last_name": "Doe",
-    "username": "johndoe",
-    "photo_url": "https://t.me/i/userpic/320/johndoe.jpg",
-    "auth_date": 1691234567,
-    "hash": "telegram_generated_hash"
-  }'
-```
-
-#### Example Response:
-```json
-{
-  "success": true,
-  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-  "user": {
-    "id": 123456789,
-    "first_name": "John",
-    "last_name": "Doe",
-    "username": "johndoe",
-    "photo_url": "https://t.me/i/userpic/320/johndoe.jpg"
-  }
-}
-```
-
-### 2. General Telegram Authentication
-
-**Endpoint:** `POST /api/v1/auth/verify`
-**Authentication:** Telegram auth data (Login Widget or Mini App)
-**Description:** Universal authentication endpoint supporting both Login Widget and Mini App
-
-#### Example Request (Mini App):
-```bash
-curl -X POST "https://minnow-good-mostly.ngrok-free.app/api/v1/auth/verify" \
-  -H "Content-Type: application/json" \
-  -H "ngrok-skip-browser-warning: true" \
-  -d '{
-    "initData": "user=%7B%22id%22%3A123456789%2C%22first_name%22%3A%22John%22%7D&auth_date=1691234567&hash=telegram_hash"
-  }'
-```
-
-#### Example Response:
-```json
-{
-  "message": "Authentication successful",
-  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-}
-```
-
----
-
-## Group Management Endpoints
-
-### 1. List User's Admin Groups
-
-**Endpoint:** `GET /api/v1/groups`
-**Authentication:** Bearer JWT token required
-**Description:** Get all groups where the authenticated user is an administrator
-
-#### Example Request:
-```bash
-curl -X GET "https://minnow-good-mostly.ngrok-free.app/api/v1/groups" \
-  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." \
-  -H "ngrok-skip-browser-warning: true"
-```
-
-#### Example Response:
-```json
-[
-  {
-    "id": "-1001234567890",
-    "title": "My Awesome Group",
-    "type": "supergroup",
-    "member_count": 150
-  },
-  {
-    "id": "-1001234567891",
-    "title": "Another Group",
-    "type": "group",
-    "member_count": 45
-  }
-]
-```
-
-### 2. Get Group Settings
-
-**Endpoint:** `GET /api/v1/groups/{groupId}/settings`
-**Authentication:** Bearer JWT token + Group admin verification
-**Description:** Get moderation settings for a specific group
-
-#### Example Request:
-```bash
-curl -X GET "https://minnow-good-mostly.ngrok-free.app/api/v1/groups/-1001234567890/settings" \
-  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." \
-  -H "ngrok-skip-browser-warning: true"
-```
-
-#### Example Response:
-```json
-{
-  "alertLevel": 0.6,
-  "muteLevel": 0.7,
-  "kickLevel": 0.8,
-  "banLevel": 0.9,
-  "spamThreshold": 0.7,
-  "muteDurationMinutes": 60,
-  "warningMessage": "Please follow the group rules.",
-  "warningMessageDeleteSeconds": 30,
-  "keywordWhitelistBypass": true,
-  "strikeExpirationDays": 7,
-  "goodBehaviorDays": 30,
-  "whitelistedKeywords": ["approved", "verified", "official"]
-}
-```
-
-### 3. Update Group Settings
-
-**Endpoint:** `PUT /api/v1/groups/{groupId}/settings`
-**Authentication:** Bearer JWT token + Group admin verification
-**Description:** Update moderation settings for a specific group
-
-#### Example Request:
-```bash
-curl -X PUT "https://minnow-good-mostly.ngrok-free.app/api/v1/groups/-1001234567890/settings" \
-  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." \
-  -H "Content-Type: application/json" \
-  -H "ngrok-skip-browser-warning: true" \
-  -d '{
-    "settings": {
-      "spamThreshold": 0.8,
-      "muteDurationMinutes": 120,
-      "warningMessage": "Updated warning message"
-    }
-  }'
-```
-
-#### Example Response:
-```json
-{
-  "message": "Settings updated successfully.",
-  "settings": {
-    "alertLevel": 0.6,
-    "muteLevel": 0.7,
-    "kickLevel": 0.8,
-    "banLevel": 0.9,
-    "spamThreshold": 0.8,
-    "muteDurationMinutes": 120,
-    "warningMessage": "Updated warning message",
-    "warningMessageDeleteSeconds": 30,
-    "keywordWhitelistBypass": true,
-    "strikeExpirationDays": 7,
-    "goodBehaviorDays": 30,
-    "whitelistedKeywords": ["approved", "verified", "official"]
-  }
-}
-```
-
-### 4. Get Group Statistics
-
-**Endpoint:** `GET /api/v1/groups/{groupId}/stats`
-**Authentication:** Bearer JWT token + Group admin verification
-**Description:** Get moderation statistics for a specific group
-
-#### Example Request:
-```bash
-curl -X GET "https://minnow-good-mostly.ngrok-free.app/api/v1/groups/-1001234567890/stats" \
-  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." \
-  -H "ngrok-skip-browser-warning: true"
-```
-
-#### Example Response:
-```json
-{
-  "totalMessagesProcessed": 1250,
-  "violationsDetected": 45,
-  "actionsTaken": 45,
-  "deletionsToday": 12
-}
-```
-
----
 
 ## WebApp Endpoints
 
-### 1. WebApp Authentication
+### POST `/webapp/auth`
+**Authenticate Telegram WebApp user**
 
-**Endpoint:** `POST /api/v1/webapp/auth`
-**Authentication:** X-Telegram-Init-Data header
-**Description:** Authenticate Telegram WebApp user and return JWT token
+Validates Telegram WebApp initData and returns JWT token for API access.
 
-#### Example Request:
-```bash
-curl -X POST "https://minnow-good-mostly.ngrok-free.app/api/v1/webapp/auth" \
-  -H "X-Telegram-Init-Data: user=%7B%22id%22%3A123456789%7D&auth_date=1691234567&hash=telegram_hash" \
-  -H "ngrok-skip-browser-warning: true"
-```
+**Security**: Telegram WebApp authentication required
+**Content-Type**: `application/json`
 
-#### Example Response:
+**Response**:
 ```json
 {
   "success": true,
+  "message": "Authentication successful",
   "data": {
-    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "token": "eyJhbGciOiJIUzI1NiIs...",
     "user": {
       "id": 123456789,
       "first_name": "John",
@@ -330,510 +57,631 @@ curl -X POST "https://minnow-good-mostly.ngrok-free.app/api/v1/webapp/auth" \
       "username": "johndoe",
       "language_code": "en"
     }
-  },
-  "message": "Authentication successful"
-}
-```
-
-### 2. Get User Profile
-
-**Endpoint:** `GET /api/v1/webapp/user/profile`
-**Authentication:** X-Telegram-Init-Data header
-**Description:** Get current user's profile information
-
-#### Example Request:
-```bash
-curl -X GET "https://minnow-good-mostly.ngrok-free.app/api/v1/webapp/user/profile" \
-  -H "X-Telegram-Init-Data: user=%7B%22id%22%3A123456789%7D&auth_date=1691234567&hash=telegram_hash" \
-  -H "ngrok-skip-browser-warning: true"
-```
-
-#### Example Response:
-```json
-{
-  "success": true,
-  "data": {
-    "id": 123456789,
-    "first_name": "John",
-    "last_name": "Doe",
-    "username": "johndoe",
-    "language_code": "en",
-    "admin_groups": [
-      {
-        "id": "-1001234567890",
-        "title": "My Awesome Group",
-        "type": "supergroup"
-      }
-    ]
-  },
-  "message": "Profile retrieved successfully"
-}
-```
-
-### 3. Get User's Groups (WebApp)
-
-**Endpoint:** `GET /api/v1/webapp/user/groups`
-**Authentication:** X-Telegram-Init-Data header
-**Description:** Get list of groups where user is admin (WebApp version)
-
-#### Example Request:
-```bash
-curl -X GET "https://minnow-good-mostly.ngrok-free.app/api/v1/webapp/user/groups" \
-  -H "X-Telegram-Init-Data: user=%7B%22id%22%3A123456789%7D&auth_date=1691234567&hash=telegram_hash" \
-  -H "ngrok-skip-browser-warning: true"
-```
-
-#### Example Response:
-```json
-{
-  "success": true,
-  "data": [
-    {
-      "id": "-1001234567890",
-      "title": "My Awesome Group",
-      "type": "supergroup",
-      "member_count": 150
-    },
-    {
-      "id": "-1001234567891",
-      "title": "Another Group",
-      "type": "group", 
-      "member_count": 45
-    }
-  ],
-  "message": "User groups retrieved successfully"
-}
-```
-
-### 4. Get Group Settings (WebApp)
-
-**Endpoint:** `GET /api/v1/webapp/group/{groupId}/settings`
-**Authentication:** X-Telegram-Init-Data header + Group admin verification
-**Description:** Get group settings via WebApp
-
-#### Example Request:
-```bash
-curl -X GET "https://minnow-good-mostly.ngrok-free.app/api/v1/webapp/group/-1001234567890/settings" \
-  -H "X-Telegram-Init-Data: user=%7B%22id%22%3A123456789%7D&auth_date=1691234567&hash=telegram_hash" \
-  -H "ngrok-skip-browser-warning: true"
-```
-
-#### Example Response:
-```json
-{
-  "success": true,
-  "data": {
-    "groupId": "-1001234567890",
-    "settings": {
-      "alertLevel": 0.6,
-      "muteLevel": 0.7,
-      "kickLevel": 0.8,
-      "banLevel": 0.9,
-      "spamThreshold": 0.7,
-      "muteDurationMinutes": 60,
-      "warningMessage": "Please follow the group rules.",
-      "warningMessageDeleteSeconds": 30,
-      "keywordWhitelistBypass": true,
-      "strikeExpirationDays": 7,
-      "goodBehaviorDays": 30,
-      "whitelistedKeywords": ["approved", "verified", "official"]
-    }
   }
 }
 ```
 
-### 5. Update Group Settings (WebApp)
+## Analytics Endpoints
 
-**Endpoint:** `PUT /api/v1/webapp/group/{groupId}/settings`
-**Authentication:** X-Telegram-Init-Data header + Group admin verification
-**Description:** Update group settings via WebApp
+### GET `/webapp/group/{groupId}/stats`
+**Get enhanced group moderation statistics**
 
-#### Example Request:
-```bash
-curl -X PUT "https://minnow-good-mostly.ngrok-free.app/api/v1/webapp/group/-1001234567890/settings" \
-  -H "X-Telegram-Init-Data: user=%7B%22id%22%3A123456789%7D&auth_date=1691234567&hash=telegram_hash" \
-  -H "Content-Type: application/json" \
-  -H "ngrok-skip-browser-warning: true" \
-  -d '{
-    "settings": {
-      "spamThreshold": 0.8,
-      "muteDurationMinutes": 120
-    }
-  }'
-```
+Retrieves comprehensive moderation statistics including message analysis, user penalties, and quality metrics.
 
-#### Example Response:
-```json
-{
-  "success": true,
-  "message": "Settings updated successfully"
-}
-```
+**Parameters**:
+- `groupId` (path, required): Group identifier
+- `period` (query, optional): Time period (`day`, `week`, `month`, `year`) - default: `week`
 
-### 6. Get Group Statistics (WebApp)
+**Security**: JWT Bearer token required
 
-**Endpoint:** `GET /api/v1/webapp/group/{groupId}/stats?period=week`
-**Authentication:** X-Telegram-Init-Data header + Group admin verification
-**Description:** Get group statistics with time period filter
-
-#### Query Parameters:
-- `period` (optional): `day`, `week`, `month`, `year` (default: `week`)
-
-#### Example Request:
-```bash
-curl -X GET "https://minnow-good-mostly.ngrok-free.app/api/v1/webapp/group/-1001234567890/stats?period=month" \
-  -H "X-Telegram-Init-Data: user=%7B%22id%22%3A123456789%7D&auth_date=1691234567&hash=telegram_hash" \
-  -H "ngrok-skip-browser-warning: true"
-```
-
-#### Example Response:
+**Response Example**:
 ```json
 {
   "success": true,
   "data": {
-    "groupId": "-1001234567890",
-    "period": "month",
+    "groupId": "-100123456789",
+    "period": "week",
+    "dateRange": {
+      "start": "2024-01-15T00:00:00.000Z",
+      "end": "2024-01-22T00:00:00.000Z"
+    },
     "stats": {
-      "totalMessages": 5420,
-      "flaggedMessages": 156,
-      "deletedMessages": 123,
-      "mutedUsers": 23,
-      "kickedUsers": 8,
-      "bannedUsers": 3,
-      "averageSpamScore": 0.15,
+      "totalMessages": 15420,
+      "flaggedMessages": {
+        "total": 342,
+        "spam": 289,
+        "profanity": 53
+      },
+      "deletedMessages": 298,
+      "penalties": {
+        "mutedUsers": 42,
+        "kickedUsers": 18,
+        "bannedUsers": 7,
+        "totalUsersActioned": 58
+      },
+      "qualityMetrics": {
+        "averageSpamScore": 0.73,
+        "flaggedRate": 2.22,
+        "moderationEfficiency": {
+          "messagesScanned": 15420,
+          "violationsDetected": 342,
+          "usersActioned": 58
+        }
+      },
       "topViolationTypes": [
-        {"type": "spam", "count": 89},
-        {"type": "profanity", "count": 34},
-        {"type": "flood", "count": 33}
+        { "type": "SPAM", "count": 289 },
+        { "type": "PROFANITY", "count": 53 }
       ]
     }
   }
 }
 ```
 
----
+### GET `/webapp/group/{groupId}/users`
+**Get detailed user activity statistics**
 
-## NLP (Natural Language Processing) Endpoints
+Retrieves user activity statistics including violation rates and penalty history for group members.
 
-### 1. Get NLP Status
+**Parameters**:
+- `groupId` (path, required): Group identifier
+- `period` (query, optional): Time period (`day`, `week`, `month`, `year`) - default: `week`
+- `limit` (query, optional): Maximum users to return (1-100) - default: `10`
 
-**Endpoint:** `GET /api/v1/nlp/status`
-**Authentication:** Bearer JWT token required
-**Description:** Get NLP service status and capabilities
+**Security**: JWT Bearer token required
 
-#### Example Request:
-```bash
-curl -X GET "https://minnow-good-mostly.ngrok-free.app/api/v1/nlp/status" \
-  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." \
-  -H "ngrok-skip-browser-warning: true"
-```
-
-#### Example Response:
+**Response Example**:
 ```json
 {
   "success": true,
-  "status": {
-    "service": "NLP Processing Service",
-    "version": "2.0",
-    "model": "gpt-4o-mini",
-    "features": {
-      "spamDetection": true,
-      "profanityFilter": true,
-      "combinedAnalysis": true,
-      "localFallbacks": true
+  "data": {
+    "groupId": "-100123456789",
+    "period": "week",
+    "dateRange": {
+      "start": "2024-01-15T00:00:00.000Z",
+      "end": "2024-01-22T00:00:00.000Z"
     },
-    "capabilities": [
-      "Real-time spam detection",
-      "Context-aware profanity filtering",
-      "Whitelist keyword support",
-      "Parallel processing",
-      "Error handling with fallbacks"
+    "users": [
+      {
+        "userId": "987654321",
+        "username": "problematicuser",
+        "firstName": "Problem",
+        "lastName": "User",
+        "stats": {
+          "messagesSent": 256,
+          "violations": 12,
+          "penalties": 3,
+          "averageSpamScore": 0.82,
+          "violationRate": 4.69
+        }
+      }
     ]
   }
 }
 ```
 
-### 2. Test Spam Detection
+### GET `/webapp/group/{groupId}/patterns`
+**Get activity patterns for a group**
 
-**Endpoint:** `POST /api/v1/nlp/test/spam`
-**Authentication:** Bearer JWT token required
-**Description:** Test spam detection on a message
+Analyzes time-based activity patterns including hourly distribution and daily activity trends.
 
-#### Example Request:
-```bash
-curl -X POST "https://minnow-good-mostly.ngrok-free.app/api/v1/nlp/test/spam" \
-  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." \
-  -H "Content-Type: application/json" \
-  -H "ngrok-skip-browser-warning: true" \
-  -d '{
-    "text": "Buy now! Limited time offer! Click here for amazing deals!",
-    "whitelistedKeywords": ["official", "verified"]
-  }'
-```
+**Parameters**:
+- `groupId` (path, required): Group identifier
+- `period` (query, optional): Time period (`day`, `week`, `month`, `year`) - default: `week`
 
-#### Example Response:
+**Security**: JWT Bearer token required
+
+**Response Example**:
 ```json
 {
   "success": true,
-  "analysis": {
-    "isSpam": true,
-    "score": 0.85,
-    "confidence": 0.92,
-    "reasons": [
-      "Contains promotional language",
-      "Uses urgency tactics",
-      "Multiple exclamation marks"
-    ]
-  },
-  "input": {
-    "text": "Buy now! Limited time offer! Click here for amazing deals!",
-    "whitelistedKeywords": ["official", "verified"]
-  }
-}
-```
-
-### 3. Test Profanity Detection
-
-**Endpoint:** `POST /api/v1/nlp/test/profanity`
-**Authentication:** Bearer JWT token required
-**Description:** Test profanity detection on a message
-
-#### Example Request:
-```bash
-curl -X POST "https://minnow-good-mostly.ngrok-free.app/api/v1/nlp/test/profanity" \
-  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." \
-  -H "Content-Type: application/json" \
-  -H "ngrok-skip-browser-warning: true" \
-  -d '{
-    "text": "This is a clean message with no bad words."
-  }'
-```
-
-#### Example Response:
-```json
-{
-  "success": true,
-  "analysis": {
-    "hasProfanity": false,
-    "severity": 0,
-    "confidence": 0.98,
-    "detectedWords": []
-  },
-  "input": {
-    "text": "This is a clean message with no bad words."
-  }
-}
-```
-
-### 4. Complete Message Analysis
-
-**Endpoint:** `POST /api/v1/nlp/analyze`
-**Authentication:** Bearer JWT token required
-**Description:** Run complete analysis (spam + profanity) with group-specific interpretation
-
-#### Example Request:
-```bash
-curl -X POST "https://minnow-good-mostly.ngrok-free.app/api/v1/nlp/analyze" \
-  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." \
-  -H "Content-Type: application/json" \
-  -H "ngrok-skip-browser-warning: true" \
-  -d '{
-    "text": "Check out this amazing product! Limited time only!",
-    "whitelistedKeywords": ["official"],
-    "groupId": "-1001234567890"
-  }'
-```
-
-#### Example Response:
-```json
-{
-  "success": true,
-  "analysis": {
-    "spam": {
-      "isSpam": true,
-      "score": 0.78,
-      "confidence": 0.89,
-      "reasons": ["promotional language", "urgency tactics"]
-    },
-    "profanity": {
-      "hasProfanity": false,
-      "severity": 0,
-      "confidence": 0.99,
-      "detectedWords": []
+  "data": {
+    "groupId": "-100123456789",
+    "period": "week",
+    "patterns": {
+      "hourlyDistribution": [
+        {
+          "hour": 0,
+          "messages": 127,
+          "violations": 8,
+          "violationRate": 6.30
+        },
+        {
+          "hour": 1,
+          "messages": 89,
+          "violations": 3,
+          "violationRate": 3.37
+        }
+      ],
+      "dailyActivity": [
+        {
+          "date": "2024-01-15",
+          "messages": 2341,
+          "violations": 45,
+          "violationRate": 1.92
+        }
+      ]
     }
-  },
-  "interpretation": {
-    "wouldTriggerSpam": true,
-    "wouldTriggerProfanity": false,
-    "spamThreshold": 0.7,
-    "profanityEnabled": true,
-    "profanityThreshold": 0.5
-  },
-  "input": {
-    "text": "Check out this amazing product! Limited time only!",
-    "whitelistedKeywords": ["official"],
-    "groupId": "-1001234567890"
   }
 }
 ```
 
----
+### GET `/webapp/group/{groupId}/effectiveness`
+**Get moderation effectiveness metrics**
 
-## Common Headers
+Provides comprehensive metrics to evaluate moderation system performance including response times and repeat offender analysis.
 
-### Required Headers for All Requests:
-- `Content-Type: application/json` (for POST/PUT requests)
-- `ngrok-skip-browser-warning: true` (for ngrok tunnels)
+**Parameters**:
+- `groupId` (path, required): Group identifier
+- `period` (query, optional): Time period (`day`, `week`, `month`, `year`) - default: `week`
 
-### Authentication Headers:
+**Security**: JWT Bearer token required
 
-#### JWT Token Authentication:
-```bash
-Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
-```
-
-#### Telegram WebApp Authentication:
-```bash
-X-Telegram-Init-Data: user=%7B%22id%22%3A123456789%7D&auth_date=1691234567&hash=telegram_hash
-```
-
----
-
-## Error Responses
-
-### Common Error Format:
+**Response Example**:
 ```json
 {
-  "status": "error",
-  "error": {
-    "code": "ERROR_CODE",
-    "message": "Human readable error message",
-    "statusCode": 400,
-    "timestamp": "2025-08-04T22:07:47.248Z"
+  "success": true,
+  "data": {
+    "groupId": "-100123456789",
+    "period": "week",
+    "effectiveness": {
+      "averageResponseTimeSeconds": 2.3,
+      "effectivenessScore": 87,
+      "totalRepeatOffenders": 12,
+      "responseTimeDistribution": [
+        {
+          "violationType": "SPAM",
+          "penaltyAction": "MUTE",
+          "responseTimeSeconds": 1.8
+        }
+      ],
+      "topRepeatOffenders": [
+        {
+          "userId": "987654321",
+          "totalViolations": 23,
+          "activeDays": 5,
+          "averageViolationScore": 0.89
+        }
+      ]
+    }
   }
 }
 ```
 
-### Common HTTP Status Codes:
+## Groups Management
 
-#### 400 Bad Request:
+### GET `/groups`
+**List groups the user is an admin of**
+
+Returns all Telegram groups where the authenticated user has administrative privileges.
+
+**Security**: JWT Bearer token required
+
+**Response Example**:
 ```json
 {
-  "errors": [
+  "success": true,
+  "data": [
     {
-      "msg": "Invalid value",
-      "param": "text",
-      "location": "body"
+      "chatId": "-100123456789",
+      "chatTitle": "Telegram Moderation Group"
+    },
+    {
+      "chatId": "-100987654321",
+      "chatTitle": "Another Moderated Group"
     }
   ]
 }
 ```
 
-#### 401 Unauthorized:
+### GET `/groups/{groupId}/settings`
+**Get group settings**
+
+Retrieves the current moderation settings for a specific group.
+
+**Parameters**:
+- `groupId` (path, required): Group identifier
+
+**Security**: JWT Bearer token required
+
+**Response Example**:
+```json
+{
+  "success": true,
+  "data": {
+    "alertLevel": 1,
+    "muteLevel": 2,
+    "kickLevel": 3,
+    "banLevel": 0,
+    "spamThreshold": 0.85,
+    "profanityEnabled": true,
+    "profanityThreshold": 0.8
+  }
+}
+```
+
+### PUT `/groups/{groupId}/settings`
+**Update group settings**
+
+Updates moderation settings for a specific group. User must be a group administrator.
+
+**Parameters**:
+- `groupId` (path, required): Group identifier
+
+**Request Body**:
+```json
+{
+  "settings": {
+    "alertLevel": 1,
+    "muteLevel": 2,
+    "kickLevel": 3,
+    "banLevel": 5,
+    "spamThreshold": 0.8,
+    "profanityEnabled": true,
+    "profanityThreshold": 0.75
+  }
+}
+```
+
+**Security**: JWT Bearer token required
+
+**Response**:
+```json
+{
+  "success": true,
+  "message": "Group settings updated successfully"
+}
+```
+
+## Strike System
+
+### GET `/groups/{groupId}/users/{userId}/strikes`
+**Get user's detailed strike history**
+
+Retrieves comprehensive strike information and history for a specific user in a group.
+
+**Parameters**:
+- `groupId` (path, required): Group identifier
+- `userId` (path, required): User identifier
+- `limit` (query, optional): Number of history entries (1-100) - default: `50`
+- `offset` (query, optional): Number of entries to skip - default: `0`
+- `includeHistory` (query, optional): Include detailed strike history - default: `false`
+
+**Security**: JWT Bearer token or Telegram WebApp authentication required
+
+**Response Example**:
+```json
+{
+  "success": true,
+  "data": {
+    "userId": "123456789",
+    "groupId": "-100123456789",
+    "currentStrikes": 2,
+    "lastStrikeTimestamp": "2024-01-20T15:30:00.000Z",
+    "history": [
+      {
+        "id": 1,
+        "amount": 1,
+        "reason": "Spam detection",
+        "timestamp": "2024-01-20T15:30:00.000Z",
+        "adminId": "987654321"
+      }
+    ]
+  }
+}
+```
+
+### POST `/groups/{groupId}/users/{userId}/strikes`
+**Add strikes to a user**
+
+Manually adds strikes to a user account. Requires group administrator privileges.
+
+**Parameters**:
+- `groupId` (path, required): Group identifier
+- `userId` (path, required): User identifier
+
+**Request Body**:
+```json
+{
+  "amount": 2,
+  "reason": "Manual moderation action - spam posting"
+}
+```
+
+**Security**: JWT Bearer token or Telegram WebApp authentication required
+
+**Response**:
+```json
+{
+  "success": true,
+  "message": "Strikes added successfully",
+  "data": {
+    "newStrikeCount": 4,
+    "strikesAdded": 2
+  }
+}
+```
+
+### DELETE `/groups/{groupId}/users/{userId}/strikes`
+**Remove strikes from a user**
+
+Removes strikes from a user account. Requires group administrator privileges.
+
+**Parameters**:
+- `groupId` (path, required): Group identifier  
+- `userId` (path, required): User identifier
+
+**Request Body**:
+```json
+{
+  "amount": 1,
+  "reason": "Appeal approved - false positive"
+}
+```
+
+**Security**: JWT Bearer token or Telegram WebApp authentication required
+
+**Response**:
+```json
+{
+  "success": true,
+  "message": "Strikes removed successfully",
+  "data": {
+    "newStrikeCount": 1,
+    "strikesRemoved": 1
+  }
+}
+```
+
+### PUT `/groups/{groupId}/users/{userId}/strikes`
+**Set user's strike count**
+
+Sets the exact number of strikes for a user. Requires group administrator privileges.
+
+**Parameters**:
+- `groupId` (path, required): Group identifier
+- `userId` (path, required): User identifier
+
+**Request Body**:
+```json
+{
+  "count": 3,
+  "reason": "Manual adjustment after review"
+}
+```
+
+**Security**: JWT Bearer token or Telegram WebApp authentication required
+
+**Response**:
+```json
+{
+  "success": true,
+  "message": "Strike count updated successfully",
+  "data": {
+    "newStrikeCount": 3,
+    "previousCount": 2
+  }
+}
+```
+
+## Authentication Endpoints
+
+### POST `/auth/verify`
+**Verify Telegram Login and Get JWT**
+
+Validates Telegram Login Widget authentication data and returns JWT token for API access.
+
+**Request Body**:
+```json
+{
+  "id": 123456789,
+  "first_name": "John",
+  "username": "johndoe",
+  "photo_url": "https://t.me/i/userpic/320/johndoe.jpg",
+  "auth_date": 1678886400,
+  "hash": "authentication_hash_from_telegram"
+}
+```
+
+**Response**:
+```json
+{
+  "success": true,
+  "message": "Authentication successful",
+  "data": {
+    "token": "eyJhbGciOiJIUzI1NiIs..."
+  }
+}
+```
+
+## Error Responses
+
+All API endpoints return standardized error responses with appropriate HTTP status codes:
+
+### 400 Bad Request
+```json
+{
+  "status": "error",
+  "error": {
+    "code": "INVALID_INPUT",
+    "message": "Invalid request parameters",
+    "statusCode": 400
+  }
+}
+```
+
+### 401 Unauthorized
 ```json
 {
   "status": "error",
   "error": {
     "code": "UNAUTHORIZED",
-    "message": "Invalid or expired token",
-    "statusCode": 401,
-    "timestamp": "2025-08-04T22:07:47.248Z"
+    "message": "Authentication required",
+    "statusCode": 401
   }
 }
 ```
 
-#### 403 Forbidden:
+### 403 Forbidden
 ```json
 {
   "status": "error",
   "error": {
     "code": "FORBIDDEN",
-    "message": "Access denied. User is not admin of this group",
-    "statusCode": 403,
-    "timestamp": "2025-08-04T22:07:47.248Z"
+    "message": "Access denied - insufficient permissions",
+    "statusCode": 403
   }
 }
 ```
 
-#### 404 Not Found:
+### 404 Not Found
 ```json
 {
   "status": "error",
   "error": {
     "code": "NOT_FOUND",
-    "message": "Group not found",
-    "statusCode": 404,
-    "timestamp": "2025-08-04T22:07:47.248Z"
+    "message": "Resource not found",
+    "statusCode": 404
   }
 }
 ```
 
-#### 429 Rate Limited:
+## Data Schemas
+
+### Group Settings Schema
 ```json
 {
-  "status": "error",
-  "error": {
-    "code": "RATE_LIMIT_EXCEEDED",
-    "message": "Too many requests from this IP, please try again later",
-    "statusCode": 429,
-    "timestamp": "2025-08-04T22:07:47.248Z"
+  "alertLevel": {
+    "type": "integer",
+    "default": 1,
+    "description": "Strikes for an AI-detected violation"
+  },
+  "muteLevel": {
+    "type": "integer",
+    "default": 2,
+    "description": "Strikes required to mute a user"
+  },
+  "kickLevel": {
+    "type": "integer",
+    "default": 3,
+    "description": "Strikes required to kick a user"
+  },
+  "banLevel": {
+    "type": "integer",
+    "default": 0,
+    "description": "Strikes required to ban a user (0 means disabled)"
+  },
+  "spamThreshold": {
+    "type": "number",
+    "default": 0.85,
+    "description": "AI confidence level to trigger a violation"
+  },
+  "profanityEnabled": {
+    "type": "boolean",
+    "default": true,
+    "description": "Enable profanity detection"
+  },
+  "profanityThreshold": {
+    "type": "number",
+    "default": 0.8,
+    "description": "Profanity detection threshold"
   }
 }
 ```
 
-#### 500 Internal Server Error:
-```json
-{
-  "status": "error",
-  "error": {
-    "code": "INTERNAL_ERROR",
-    "message": "An unexpected error occurred",
-    "statusCode": 500,
-    "timestamp": "2025-08-04T22:07:47.248Z"
+### Enhanced Group Stats Schema
+The enhanced statistics provide comprehensive insights into group moderation activity:
+
+- **Total Messages**: Count of all messages processed by the bot
+- **Flagged Messages**: Breakdown of spam vs profanity violations
+- **Deleted Messages**: Messages automatically removed by the system
+- **Penalties**: User actions taken (mutes, kicks, bans)
+- **Quality Metrics**: Performance indicators and efficiency scores
+- **Top Violation Types**: Most common violation categories
+
+### User Activity Stats Schema
+Individual user performance metrics including:
+
+- **Messages Sent**: Total message count
+- **Violations**: Number of rule violations
+- **Penalties**: Punitive actions received
+- **Average Spam Score**: Mean confidence level of flagged content
+- **Violation Rate**: Percentage of messages that violated rules
+
+### Activity Patterns Schema
+Time-based analysis including:
+
+- **Hourly Distribution**: 24-hour activity breakdown
+- **Daily Activity**: Day-by-day trends
+- **Violation Rates**: Time-based violation frequency
+
+### Moderation Effectiveness Schema
+Performance evaluation metrics:
+
+- **Response Time**: Average time to handle violations
+- **Effectiveness Score**: Overall performance rating (0-100)
+- **Repeat Offenders**: Users with multiple violations
+- **Response Distribution**: Breakdown by violation and penalty type
+
+## Usage Examples
+
+### JavaScript/Node.js Example
+```javascript
+const axios = require('axios');
+
+// Authenticate and get JWT token
+const authResponse = await axios.post('/api/v1/webapp/auth', {
+  // Telegram WebApp initData
+}, {
+  headers: {
+    'Authorization': telegramInitData
   }
-}
+});
+
+const token = authResponse.data.data.token;
+
+// Get group statistics
+const statsResponse = await axios.get('/api/v1/webapp/group/-100123456789/stats', {
+  headers: {
+    'Authorization': `Bearer ${token}`
+  },
+  params: {
+    period: 'week'
+  }
+});
+
+console.log(statsResponse.data.data.stats);
+```
+
+### Python Example
+```python
+import requests
+
+# Authentication
+auth_response = requests.post('/api/v1/webapp/auth', 
+    headers={'Authorization': telegram_init_data})
+token = auth_response.json()['data']['token']
+
+# Get user activity statistics
+headers = {'Authorization': f'Bearer {token}'}
+params = {'period': 'month', 'limit': 20}
+
+users_response = requests.get('/api/v1/webapp/group/-100123456789/users', 
+    headers=headers, params=params)
+
+users_data = users_response.json()['data']['users']
+for user in users_data:
+    print(f"User: {user['username']}, Violation Rate: {user['stats']['violationRate']}%")
 ```
 
 ---
 
-## Rate Limiting
+## Notes
 
-- **General API:** 100 requests per 15 minutes per IP
-- **Authentication endpoints:** 5 requests per 15 minutes per IP
-- **Health endpoints:** No rate limiting
+- All timestamps are returned in ISO 8601 format (UTC)
+- Rate limiting may apply to prevent abuse
+- Administrative privileges are required for modifying group settings and user strikes
+- The enhanced analytics system maintains backward compatibility with legacy data
+- All endpoints support CORS for web application integration
+- API documentation is also available at `http://localhost:3000/api/docs/` when the server is running
 
----
-
-## CORS Policy
-
-The API supports CORS for the following origins:
-- `https://web.telegram.org`
-- `https://t.me`
-- `https://telegram-moderator-dashboard.vercel.app`
-- `https://*.ngrok-free.app` (any ngrok domain)
-- `http://localhost:*` (development only)
-
----
-
-## Swagger Documentation
-
-Interactive API documentation is available at:
-**URL:** `https://minnow-good-mostly.ngrok-free.app/api/docs`
-
----
-
-## Important Notes
-
-1. **Ngrok URL Changes:** The ngrok URL changes each time the tunnel is restarted. Update your applications accordingly.
-
-2. **Token Expiration:** JWT tokens have an expiration time. Handle token refresh in your applications.
-
-3. **Group Admin Verification:** Many endpoints verify that the user is actually an admin of the specified group via Telegram API calls.
-
-4. **Rate Limiting:** Be mindful of rate limits, especially for authentication endpoints.
-
-5. **HTTPS Required:** All production endpoints must use HTTPS for security.
-
-6. **Error Handling:** Always implement proper error handling for network failures and API errors.
-
-7. **Header Requirements:** Include the `ngrok-skip-browser-warning` header when using ngrok tunnels to avoid browser warnings.
+This API documentation serves as a comprehensive reference for integrating with the Telegram Moderator Bot system and can be easily transferred between projects.

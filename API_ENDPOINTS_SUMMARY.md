@@ -9,9 +9,12 @@ The Telegram Moderator Bot API provides comprehensive endpoints for managing Tel
 
 ## Authentication
 The API supports multiple authentication methods:
-- **JWT Bearer Token**: For standard API access
+- **JWT Bearer Token**: For standard API access via `Authorization: Bearer <token>`
 - **Telegram WebApp**: Using `X-Telegram-Init-Data` header
 - **Telegram Login Widget**: For external website integration
+
+### Unified Authentication
+The unified groups API (`/api/v1/groups/*`) supports **both JWT and WebApp authentication** on the same endpoints, making integration flexible and seamless. The legacy WebApp endpoints (`/api/v1/webapp/*`) are deprecated but maintained for backward compatibility.
 
 ## API Endpoints
 
@@ -30,7 +33,7 @@ The API supports multiple authentication methods:
 | `POST` | `/api/v1/auth/verify` | Verify Telegram authentication | ❌ |
 | `POST` | `/api/v1/auth/login-widget` | Login widget authentication | ❌ |
 
-### 📱 WebApp Endpoints
+### 📱 WebApp Endpoints (Legacy - Deprecated)
 | Method | Endpoint | Description | Auth Required |
 |--------|----------|-------------|---------------|
 | `POST` | `/api/v1/webapp/auth` | WebApp authentication | Telegram WebApp |
@@ -38,26 +41,29 @@ The API supports multiple authentication methods:
 | `GET` | `/api/v1/webapp/user/groups` | Get user's admin groups | Telegram WebApp |
 | `GET` | `/api/v1/webapp/group/{groupId}/settings` | Get group settings | Telegram WebApp |
 | `PUT` | `/api/v1/webapp/group/{groupId}/settings` | Update group settings | Telegram WebApp |
-| `GET` | `/api/v1/webapp/group/{groupId}/stats` | Get group statistics | Telegram WebApp |
+| `GET` | `/api/v1/webapp/group/{groupId}/stats` | Get enhanced group statistics | Telegram WebApp |
+| `GET` | `/api/v1/webapp/group/{groupId}/users` | Get detailed user activity stats | Telegram WebApp |
+| `GET` | `/api/v1/webapp/group/{groupId}/patterns` | Get activity patterns analysis | Telegram WebApp |
+| `GET` | `/api/v1/webapp/group/{groupId}/effectiveness` | Get moderation effectiveness metrics | Telegram WebApp |
 | `GET` | `/api/v1/webapp/health` | WebApp health check | ❌ |
 
-### 👥 Groups Endpoints
+### 👥 Unified Groups Endpoints (Recommended)
 | Method | Endpoint | Description | Auth Required |
 |--------|----------|-------------|---------------|
-| `GET` | `/api/v1/groups` | List user's admin groups | JWT |
-| `GET` | `/api/v1/groups/{groupId}/settings` | Get group settings | JWT + Admin |
-| `PUT` | `/api/v1/groups/{groupId}/settings` | Update group settings | JWT + Admin |
-| `GET` | `/api/v1/groups/{groupId}/stats` | Get group statistics | JWT + Admin |
+| `GET` | `/api/v1/groups` | List user's admin groups | JWT/WebApp |
+| `GET` | `/api/v1/groups/{groupId}/settings` | Get group settings | JWT/WebApp + Admin |
+| `PUT` | `/api/v1/groups/{groupId}/settings` | Update group settings | JWT/WebApp + Admin |
+| `GET` | `/api/v1/groups/{groupId}/stats` | Get group statistics | JWT/WebApp + Admin |
 | `GET` | `/api/v1/groups/{groupId}/audit` | Get audit log (paginated) | JWT + Admin |
 | `GET` | `/api/v1/groups/{groupId}/audit/export` | Export audit log (CSV/JSON) | JWT + Admin |
 
 ### ⚡ Strike Management Endpoints
 | Method | Endpoint | Description | Auth Required |
 |--------|----------|-------------|---------------|
-| `GET` | `/api/v1/groups/{groupId}/users/{userId}/strikes` | Get user's strike history | JWT + Admin |
-| `POST` | `/api/v1/groups/{groupId}/users/{userId}/strikes/add` | Add strikes to user | JWT + Admin |
-| `POST` | `/api/v1/groups/{groupId}/users/{userId}/strikes/remove` | Remove strikes from user | JWT + Admin |
-| `POST` | `/api/v1/groups/{groupId}/users/{userId}/strikes/set` | Set user's strike count | JWT + Admin |
+| `GET` | `/api/v1/groups/{groupId}/users/{userId}/strikes` | Get user's strike history | JWT/WebApp + Admin |
+| `POST` | `/api/v1/groups/{groupId}/users/{userId}/strikes` | Add strikes to user | JWT/WebApp + Admin |
+| `DELETE` | `/api/v1/groups/{groupId}/users/{userId}/strikes` | Remove strikes from user | JWT/WebApp + Admin |
+| `PUT` | `/api/v1/groups/{groupId}/users/{userId}/strikes` | Set user's strike count | JWT/WebApp + Admin |
 
 ### 🧠 NLP Endpoints
 | Method | Endpoint | Description | Auth Required |

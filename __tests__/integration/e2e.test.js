@@ -32,6 +32,13 @@ vi.mock('../../src/common/services/database.js', () => {
     recordStrike: vi.fn().mockResolvedValue(1),
     resetStrikes: vi.fn(),
     logManualAction: vi.fn(), // Add missing mock for the new logging functionality
+    isUserGroupAdmin: vi.fn().mockResolvedValue(true),
+    getGroup: vi.fn().mockResolvedValue({ 
+      chatId: '-1001', 
+      title: 'Test Group',
+      type: 'supergroup',
+      memberCount: 100
+    }),
   };
 
   return {
@@ -81,6 +88,7 @@ describe('End-to-End API and Bot Integration Test', () => {
       .send({ settings: { muteLevel: 1 } });
 
     expect(apiResponse.status).toBe(200);
+    expect(apiResponse.body).toHaveProperty('success', true);
     expect(configService.updateSetting).toHaveBeenCalledWith('-1001', 'muteLevel', 1);
 
     // --- Phase 2: Bot handles spam message from user ---

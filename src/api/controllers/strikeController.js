@@ -1,21 +1,24 @@
 import { validationResult } from 'express-validator';
 import * as db from '../../common/services/database.js';
 import ApiError from '../utils/apiError.js';
+import { ERROR_TYPES } from '../utils/errorTypes.js';
+import { asyncHandler, successResponse, handleDatabaseError } from '../utils/errorHelpers.js';
+import logger from '../../common/services/logger.js';
 
 /**
  * GET /api/v1/groups/{groupId}/users/{userId}/strikes
  * Get a user's detailed strike history
  */
-export const getUserStrikes = async (req, res, next) => {
+export const getUserStrikes = asyncHandler(async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+        throw ApiError.badRequest('Validation error', errors.array());
+    }
+
+    const { groupId, userId } = req.params;
+    const { limit = 50, offset = 0, includeHistory = 'true' } = req.query;
+
     try {
-        const errors = validationResult(req);
-        if (!errors.isEmpty()) {
-            return res.status(400).json({ errors: errors.array() });
-        }
-
-        const { groupId, userId } = req.params;
-        const { limit = 50, offset = 0, includeHistory = 'true' } = req.query;
-
         // Get current strike count
         const strikes = await db.getStrikes(groupId, userId);
         
@@ -60,22 +63,25 @@ export const getUserStrikes = async (req, res, next) => {
             }
         });
 
-        res.status(200).json({
+        const responseData = {
             userId,
             groupId,
-            currentStrikes: strikes.count,
+            strikes: strikes.count,
             lastStrikeTimestamp: strikes.timestamp,
             history: parsedHistory,
             pagination: {
                 offset: parseInt(offset),
                 limit: parseInt(limit),
-                total: history.length
+                total: history.length,
+                hasMore: history.length === parseInt(limit)
             }
-        });
+        };
+
+        res.json(successResponse(responseData, 'User strike history retrieved successfully'));
     } catch (error) {
-        next(error);
+        throw handleDatabaseError(error);
     }
-};
+});
 
 /**
  * POST /api/v1/groups/{groupId}/users/{userId}/strikes

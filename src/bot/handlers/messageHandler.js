@@ -97,6 +97,19 @@ export const handleMessage = async (msg) => {
             profanityResult = { hasProfanity: false, severity: 0, type: 'disabled' };
         }
 
+        // Log ALL scanned messages for comprehensive stats
+        await db.logManualAction(chat.id.toString(), from.id.toString(), {
+            type: 'SCANNED',
+            action: 'message_analyzed',
+            timestamp: new Date().toISOString(),
+            user: from,
+            messageExcerpt: text.substring(0, 150),
+            spamScore: spamResult.score,
+            profanityScore: profanityResult.severity,
+            profanityType: profanityResult.type || 'none',
+            messageLength: text.length
+        });
+
         logger.debug(`Message analysis - Spam: ${spamResult.score.toFixed(2)}, Profanity: ${profanityResult.severity.toFixed(2)}`);
 
         // Determine which violation occurred (spam takes precedence for logging)
@@ -107,32 +120,37 @@ export const handleMessage = async (msg) => {
             // 1. Delete the offending message.
             await deleteMessage(chat.id, message_id);
             
-            // Log the message deletion
+            // Log the message deletion with detailed violation info
             await db.logManualAction(chat.id.toString(), from.id.toString(), {
-                type: 'AUTO',
-                action: 'deleted',
+                type: 'VIOLATION',
+                action: 'message_deleted',
                 timestamp: new Date().toISOString(),
                 user: from,
-                messageExcerpt: text.substring(0, 100),
+                messageExcerpt: text.substring(0, 150),
                 reason: 'Violation detected',
                 violationType: isSpamViolation ? 'SPAM' : 'PROFANITY',
                 spamScore: spamResult.score,
-                profanityScore: profanityResult.severity
+                profanityScore: profanityResult.severity,
+                profanityType: profanityResult.type || 'unknown',
+                messageLength: text.length,
+                thresholdExceeded: isSpamViolation ? groupSettings.spamThreshold : groupSettings.profanityThreshold
             });
 
             // 2. Prepare the log data for the strike (prioritize spam over profanity for logging)
             const violationType = isSpamViolation ? 'SPAM' : 'PROFANITY';
             const primaryScore = isSpamViolation ? spamResult.score : profanityResult.severity;
             const logData = {
-                type: 'AUTO',
+                type: 'STRIKE',
                 violationType: violationType,
                 timestamp: new Date().toISOString(),
                 user: from,
-                messageExcerpt: text.substring(0, 100),
+                messageExcerpt: text.substring(0, 150),
                 classificationScore: primaryScore,
                 spamScore: spamResult.score,
                 profanityScore: profanityResult.severity,
                 profanityType: profanityResult.type || 'unknown',
+                messageLength: text.length,
+                thresholdExceeded: isSpamViolation ? groupSettings.spamThreshold : groupSettings.profanityThreshold
             };
 
             // 3. Record the strike in the database.
@@ -162,40 +180,46 @@ async function applyPenalty(chatId, user, strikeCount, settings, logData) {
             await banUser(chatId, user.id);
             // Log the ban action
             await db.logManualAction(chatId.toString(), user.id.toString(), {
-                type: 'AUTO',
-                action: 'banned',
+                type: 'PENALTY',
+                action: 'user_banned',
                 timestamp: new Date().toISOString(),
                 user: user,
                 strikeCount: strikeCount,
                 reason: 'Strike limit reached',
-                violationType: logData?.violationType || 'UNKNOWN'
+                violationType: logData?.violationType || 'UNKNOWN',
+                executedBy: 'AUTO_MODERATOR',
+                severity: 'HIGH'
             });
         }},
         { level: settings.kickLevel, name: 'KICK', execute: async () => {
             await kickUser(chatId, user.id);
             // Log the kick action
             await db.logManualAction(chatId.toString(), user.id.toString(), {
-                type: 'AUTO',
-                action: 'kicked',
+                type: 'PENALTY',
+                action: 'user_kicked',
                 timestamp: new Date().toISOString(),
                 user: user,
                 strikeCount: strikeCount,
                 reason: 'Strike limit reached',
-                violationType: logData?.violationType || 'UNKNOWN'
+                violationType: logData?.violationType || 'UNKNOWN',
+                executedBy: 'AUTO_MODERATOR',
+                severity: 'MEDIUM'
             });
         }},
         { level: settings.muteLevel, name: 'MUTE', execute: async () => {
             await muteUser(chatId, user.id, settings.muteDurationMinutes);
             // Log the mute action
             await db.logManualAction(chatId.toString(), user.id.toString(), {
-                type: 'AUTO',
-                action: 'muted',
+                type: 'PENALTY',
+                action: 'user_muted',
                 timestamp: new Date().toISOString(),
                 user: user,
                 strikeCount: strikeCount,
                 reason: 'Strike limit reached',
                 muteDuration: settings.muteDurationMinutes,
-                violationType: logData?.violationType || 'UNKNOWN'
+                violationType: logData?.violationType || 'UNKNOWN',
+                executedBy: 'AUTO_MODERATOR',
+                severity: 'LOW'
             });
         }},
         { level: settings.alertLevel, name: 'ALERT', execute: async () => {
@@ -228,13 +252,15 @@ async function applyPenalty(chatId, user, strikeCount, settings, logData) {
             
             // Log the alert/warning action
             await db.logManualAction(chatId.toString(), user.id.toString(), {
-                type: 'AUTO',
-                action: 'warned',
+                type: 'PENALTY',
+                action: 'user_warned',
                 timestamp: new Date().toISOString(),
                 user: user,
                 strikeCount: strikeCount,
                 reason: 'Strike warning',
-                violationType: logData?.violationType || 'UNKNOWN'
+                violationType: logData?.violationType || 'UNKNOWN',
+                executedBy: 'AUTO_MODERATOR',
+                severity: 'WARNING'
             });
         }},
     ];

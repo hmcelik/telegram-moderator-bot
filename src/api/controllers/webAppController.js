@@ -260,7 +260,7 @@ export const getGroupStats = async (req, res, next) => {
                 startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
         }
 
-        // Get statistics from database
+        // Get enhanced statistics from database
         const stats = await db.getGroupStats(groupId, startDate, now);
 
         res.status(200).json({
@@ -268,14 +268,36 @@ export const getGroupStats = async (req, res, next) => {
             data: {
                 groupId,
                 period,
+                dateRange: {
+                    start: startDate.toISOString(),
+                    end: now.toISOString()
+                },
                 stats: {
+                    // Core metrics
                     totalMessages: stats.totalMessages || 0,
-                    flaggedMessages: stats.flaggedMessages || 0,
+                    flaggedMessages: stats.flaggedMessages || { total: 0, spam: 0, profanity: 0 },
                     deletedMessages: stats.deletedMessages || 0,
-                    mutedUsers: stats.mutedUsers || 0,
-                    kickedUsers: stats.kickedUsers || 0,
-                    bannedUsers: stats.bannedUsers || 0,
-                    averageSpamScore: stats.averageSpamScore || 0,
+                    
+                    // User penalties
+                    penalties: {
+                        mutedUsers: stats.mutedUsers || 0,
+                        kickedUsers: stats.kickedUsers || 0,
+                        bannedUsers: stats.bannedUsers || 0,
+                        totalUsersActioned: (stats.mutedUsers || 0) + (stats.kickedUsers || 0) + (stats.bannedUsers || 0)
+                    },
+                    
+                    // Quality metrics
+                    qualityMetrics: {
+                        averageSpamScore: stats.averageSpamScore || 0,
+                        flaggedRate: stats.flaggedRate || 0,
+                        moderationEfficiency: stats.autoModerationEfficiency || {
+                            messagesScanned: 0,
+                            violationsDetected: 0,
+                            usersActioned: 0
+                        }
+                    },
+                    
+                    // Top violation types
                     topViolationTypes: stats.topViolationTypes || []
                 }
             }
@@ -283,5 +305,216 @@ export const getGroupStats = async (req, res, next) => {
     } catch (error) {
         logger.error('Error in getGroupStats:', error);
         next(new ApiError(500, 'Failed to get group statistics'));
+    }
+};
+
+/**
+ * Get detailed user activity stats for a group
+ */
+export const getUserActivityStats = async (req, res, next) => {
+    try {
+        const { groupId } = req.params;
+        const { telegramUser } = req;
+        const { period = 'week', limit = 10 } = req.query;
+        
+        // Check if user is admin of this group
+        const isAdmin = await db.isUserGroupAdmin(telegramUser.id, groupId);
+        if (!isAdmin) {
+            return next(new ApiError(403, 'Access denied. User is not admin of this group'));
+        }
+
+        // Calculate date range based on period
+        const now = new Date();
+        let startDate;
+        
+        switch (period) {
+            case 'day':
+                startDate = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+                break;
+            case 'week':
+                startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+                break;
+            case 'month':
+                startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+                break;
+            case 'year':
+                startDate = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
+                break;
+            default:
+                startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        }
+
+        const userStats = await db.getUserActivityStats(groupId, startDate, now, parseInt(limit));
+
+        res.status(200).json({
+            success: true,
+            data: {
+                groupId,
+                period,
+                dateRange: {
+                    start: startDate.toISOString(),
+                    end: now.toISOString()
+                },
+                users: userStats.map(user => ({
+                    userId: user.userId,
+                    username: user.username || 'N/A',
+                    firstName: user.firstName || '',
+                    lastName: user.lastName || '',
+                    stats: {
+                        messagesSent: user.messages_sent || 0,
+                        violations: user.violations || 0,
+                        penalties: user.penalties || 0,
+                        averageSpamScore: Math.round((user.avg_spam_score || 0) * 100) / 100,
+                        violationRate: user.messages_sent > 0 ? 
+                            Math.round((user.violations / user.messages_sent) * 10000) / 100 : 0
+                    }
+                }))
+            }
+        });
+    } catch (error) {
+        logger.error('Error in getUserActivityStats:', error);
+        next(new ApiError(500, 'Failed to get user activity statistics'));
+    }
+};
+
+/**
+ * Get activity patterns for a group (hourly/daily distribution)
+ */
+export const getActivityPatterns = async (req, res, next) => {
+    try {
+        const { groupId } = req.params;
+        const { telegramUser } = req;
+        const { period = 'week' } = req.query;
+        
+        // Check if user is admin of this group
+        const isAdmin = await db.isUserGroupAdmin(telegramUser.id, groupId);
+        if (!isAdmin) {
+            return next(new ApiError(403, 'Access denied. User is not admin of this group'));
+        }
+
+        // Calculate date range based on period
+        const now = new Date();
+        let startDate;
+        
+        switch (period) {
+            case 'day':
+                startDate = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+                break;
+            case 'week':
+                startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+                break;
+            case 'month':
+                startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+                break;
+            case 'year':
+                startDate = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
+                break;
+            default:
+                startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        }
+
+        const patterns = await db.getActivityPatterns(groupId, startDate, now);
+
+        res.status(200).json({
+            success: true,
+            data: {
+                groupId,
+                period,
+                dateRange: {
+                    start: startDate.toISOString(),
+                    end: now.toISOString()
+                },
+                patterns: {
+                    hourlyDistribution: patterns.hourlyDistribution.map(hour => ({
+                        hour: parseInt(hour.hour),
+                        messages: hour.messages || 0,
+                        violations: hour.violations || 0,
+                        violationRate: hour.messages > 0 ? 
+                            Math.round((hour.violations / hour.messages) * 10000) / 100 : 0
+                    })),
+                    dailyActivity: patterns.dailyActivity.map(day => ({
+                        date: day.date,
+                        messages: day.messages || 0,
+                        violations: day.violations || 0,
+                        violationRate: day.messages > 0 ? 
+                            Math.round((day.violations / day.messages) * 10000) / 100 : 0
+                    }))
+                }
+            }
+        });
+    } catch (error) {
+        logger.error('Error in getActivityPatterns:', error);
+        next(new ApiError(500, 'Failed to get activity patterns'));
+    }
+};
+
+/**
+ * Get moderation effectiveness metrics
+ */
+export const getModerationEffectiveness = async (req, res, next) => {
+    try {
+        const { groupId } = req.params;
+        const { telegramUser } = req;
+        const { period = 'week' } = req.query;
+        
+        // Check if user is admin of this group
+        const isAdmin = await db.isUserGroupAdmin(telegramUser.id, groupId);
+        if (!isAdmin) {
+            return next(new ApiError(403, 'Access denied. User is not admin of this group'));
+        }
+
+        // Calculate date range based on period
+        const now = new Date();
+        let startDate;
+        
+        switch (period) {
+            case 'day':
+                startDate = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+                break;
+            case 'week':
+                startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+                break;
+            case 'month':
+                startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+                break;
+            case 'year':
+                startDate = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
+                break;
+            default:
+                startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        }
+
+        const effectiveness = await db.getModerationEffectiveness(groupId, startDate, now);
+
+        res.status(200).json({
+            success: true,
+            data: {
+                groupId,
+                period,
+                dateRange: {
+                    start: startDate.toISOString(),
+                    end: now.toISOString()
+                },
+                effectiveness: {
+                    averageResponseTimeSeconds: effectiveness.averageResponseTimeSeconds || 0,
+                    effectivenessScore: Math.round(effectiveness.effectivenessScore || 0),
+                    totalRepeatOffenders: effectiveness.totalRepeatOffenders || 0,
+                    responseTimeDistribution: effectiveness.responseTimeDistribution?.map(response => ({
+                        violationType: response.violation_type,
+                        penaltyAction: response.penalty_action?.replace('user_', ''),
+                        responseTimeSeconds: Math.round(response.response_time_seconds * 100) / 100
+                    })) || [],
+                    topRepeatOffenders: effectiveness.repeatOffenders?.slice(0, 5).map(offender => ({
+                        userId: offender.userId,
+                        totalViolations: offender.total_violations,
+                        activeDays: offender.active_days,
+                        averageViolationScore: Math.round((offender.avg_violation_score || 0) * 100) / 100
+                    })) || []
+                }
+            }
+        });
+    } catch (error) {
+        logger.error('Error in getModerationEffectiveness:', error);
+        next(new ApiError(500, 'Failed to get moderation effectiveness'));
     }
 };

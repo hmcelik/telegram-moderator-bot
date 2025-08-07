@@ -31,7 +31,7 @@ describe('WebApp API Endpoints', () => {
                 .expect(200);
 
             expect(response.body).toMatchObject({
-                status: 'success',
+                success: true,
                 data: {
                     status: 'healthy',
                     features: {

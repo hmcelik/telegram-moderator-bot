@@ -58,12 +58,14 @@ describe('Strike Management API', () => {
                 .get('/api/v1/groups/test-group/users/test-user/strikes')
                 .expect(200);
 
-            expect(response.body).toHaveProperty('userId', 'test-user');
-            expect(response.body).toHaveProperty('groupId', 'test-group');
-            expect(response.body).toHaveProperty('currentStrikes', 5);
-            expect(response.body.history).toHaveLength(1);
-            expect(response.body.history[0]).toHaveProperty('type', 'MANUAL-STRIKE-ADD');
-            expect(response.body.history[0]).toHaveProperty('amount', 2);
+            expect(response.body).toHaveProperty('success', true);
+            expect(response.body).toHaveProperty('data');
+            expect(response.body.data).toHaveProperty('userId', 'test-user');
+            expect(response.body.data).toHaveProperty('groupId', 'test-group');
+            expect(response.body.data).toHaveProperty('strikes', 5);
+            expect(response.body.data.history).toHaveLength(1);
+            expect(response.body.data.history[0]).toHaveProperty('type', 'MANUAL-STRIKE-ADD');
+            expect(response.body.data.history[0]).toHaveProperty('amount', 2);
         });
 
         it('should get user strikes without history when includeHistory=false', async () => {
@@ -75,8 +77,10 @@ describe('Strike Management API', () => {
                 .get('/api/v1/groups/test-group/users/test-user/strikes?includeHistory=false')
                 .expect(200);
 
-            expect(response.body).toHaveProperty('currentStrikes', 3);
-            expect(response.body.history).toHaveLength(0);
+            expect(response.body).toHaveProperty('success', true);
+            expect(response.body).toHaveProperty('data');
+            expect(response.body.data).toHaveProperty('strikes', 3);
+            expect(response.body.data.history).toHaveLength(0);
             expect(db.getStrikeHistory).not.toHaveBeenCalled();
         });
     });

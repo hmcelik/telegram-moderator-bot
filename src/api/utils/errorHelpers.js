@@ -45,10 +45,11 @@ export const maintenanceCheck = (req, res, next) => {
 
 /**
  * Create standardized success response
+ * Ensures consistent API response format across all endpoints
  */
 export const successResponse = (data, message = 'Success', meta = null) => {
     const response = {
-        status: 'success',
+        success: true,
         message,
         data,
         timestamp: new Date().toISOString()
@@ -59,6 +60,19 @@ export const successResponse = (data, message = 'Success', meta = null) => {
     }
     
     return response;
+};
+
+/**
+ * Create standardized success response (legacy format for backward compatibility)
+ * @deprecated Use successResponse instead
+ */
+export const legacySuccessResponse = (data, message = 'Success') => {
+    return {
+        status: 'success',
+        message,
+        data,
+        timestamp: new Date().toISOString()
+    };
 };
 
 /**

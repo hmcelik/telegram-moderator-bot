@@ -354,98 +354,208 @@ export const getGroupStats = async (groupId, startDate, endDate) => {
     const dbInstance = getDb();
     
     try {
-        // Debug: Check if there are any audit log entries at all
-        const totalAuditEntries = await dbInstance.get(`
-            SELECT COUNT(*) as count FROM audit_log WHERE chatId = ?
-        `, groupId);
-        
-        const recentAuditEntries = await dbInstance.all(`
-            SELECT * FROM audit_log WHERE chatId = ? ORDER BY timestamp DESC LIMIT 5
-        `, groupId);
-        
-        console.log(`Debug: Total audit entries for group ${groupId}: ${totalAuditEntries?.count || 0}`);
-        console.log('Debug: Recent entries:', recentAuditEntries);
-        
-        // Get basic statistics
-        const totalMessages = await dbInstance.get(`
+        // Count all scanned messages (total messages processed by bot) - new format
+        const totalMessagesNew = await dbInstance.get(`
+            SELECT COUNT(*) as count 
+            FROM audit_log 
+            WHERE chatId = ? AND timestamp BETWEEN ? AND ?
+            AND JSON_EXTRACT(logData, '$.type') = 'SCANNED'
+        `, groupId, startDate.toISOString(), endDate.toISOString());
+
+        // Fallback: count all entries if no SCANNED entries exist (backward compatibility)
+        const totalMessagesAll = await dbInstance.get(`
             SELECT COUNT(*) as count 
             FROM audit_log 
             WHERE chatId = ? AND timestamp BETWEEN ? AND ?
         `, groupId, startDate.toISOString(), endDate.toISOString());
 
-        const flaggedMessages = await dbInstance.get(`
+        const totalScannedCount = totalMessagesNew?.count > 0 ? totalMessagesNew.count : totalMessagesAll?.count || 0;
+
+        // Count flagged messages by violation type - new format
+        const spamMessagesNew = await dbInstance.get(`
             SELECT COUNT(*) as count 
             FROM audit_log 
             WHERE chatId = ? AND timestamp BETWEEN ? AND ? 
-            AND (JSON_EXTRACT(logData, '$.action') IN ('flagged', 'deleted') OR JSON_EXTRACT(logData, '$.violationType') IS NOT NULL)
+            AND JSON_EXTRACT(logData, '$.type') = 'VIOLATION'
+            AND JSON_EXTRACT(logData, '$.violationType') = 'SPAM'
         `, groupId, startDate.toISOString(), endDate.toISOString());
 
-        const deletedMessages = await dbInstance.get(`
+        const profanityMessagesNew = await dbInstance.get(`
             SELECT COUNT(*) as count 
             FROM audit_log 
             WHERE chatId = ? AND timestamp BETWEEN ? AND ? 
+            AND JSON_EXTRACT(logData, '$.type') = 'VIOLATION'
+            AND JSON_EXTRACT(logData, '$.violationType') = 'PROFANITY'
+        `, groupId, startDate.toISOString(), endDate.toISOString());
+
+        // Backward compatibility: count old format AUTO entries
+        const oldAutoEntries = await dbInstance.get(`
+            SELECT COUNT(*) as count 
+            FROM audit_log 
+            WHERE chatId = ? AND timestamp BETWEEN ? AND ? 
+            AND JSON_EXTRACT(logData, '$.type') = 'AUTO'
+            AND JSON_EXTRACT(logData, '$.classificationScore') IS NOT NULL
+        `, groupId, startDate.toISOString(), endDate.toISOString());
+
+        const spamCount = (spamMessagesNew?.count || 0) + (oldAutoEntries?.count || 0);
+        const profanityCount = profanityMessagesNew?.count || 0;
+
+        // Count deleted messages
+        const deletedMessagesNew = await dbInstance.get(`
+            SELECT COUNT(*) as count 
+            FROM audit_log 
+            WHERE chatId = ? AND timestamp BETWEEN ? AND ? 
+            AND JSON_EXTRACT(logData, '$.action') = 'message_deleted'
+        `, groupId, startDate.toISOString(), endDate.toISOString());
+
+        // Backward compatibility for deletions
+        const deletedMessagesOld = await dbInstance.get(`
+            SELECT COUNT(*) as count 
+            FROM audit_log 
+            WHERE chatId = ? AND timestamp BETWEEN ? AND ? 
+            AND JSON_EXTRACT(logData, '$.type') = 'AUTO'
             AND JSON_EXTRACT(logData, '$.action') = 'deleted'
         `, groupId, startDate.toISOString(), endDate.toISOString());
 
-        const mutedUsers = await dbInstance.get(`
+        const totalDeleted = (deletedMessagesNew?.count || 0) + (deletedMessagesOld?.count || 0);
+
+        // Count unique users affected by penalties - new format
+        const mutedUsersNew = await dbInstance.get(`
+            SELECT COUNT(DISTINCT userId) as count 
+            FROM audit_log 
+            WHERE chatId = ? AND timestamp BETWEEN ? AND ? 
+            AND JSON_EXTRACT(logData, '$.action') = 'user_muted'
+        `, groupId, startDate.toISOString(), endDate.toISOString());
+
+        const kickedUsersNew = await dbInstance.get(`
+            SELECT COUNT(DISTINCT userId) as count 
+            FROM audit_log 
+            WHERE chatId = ? AND timestamp BETWEEN ? AND ? 
+            AND JSON_EXTRACT(logData, '$.action') = 'user_kicked'
+        `, groupId, startDate.toISOString(), endDate.toISOString());
+
+        const bannedUsersNew = await dbInstance.get(`
+            SELECT COUNT(DISTINCT userId) as count 
+            FROM audit_log 
+            WHERE chatId = ? AND timestamp BETWEEN ? AND ? 
+            AND JSON_EXTRACT(logData, '$.action') = 'user_banned'
+        `, groupId, startDate.toISOString(), endDate.toISOString());
+
+        // Backward compatibility for penalties
+        const mutedUsersOld = await dbInstance.get(`
             SELECT COUNT(DISTINCT userId) as count 
             FROM audit_log 
             WHERE chatId = ? AND timestamp BETWEEN ? AND ? 
             AND JSON_EXTRACT(logData, '$.action') = 'muted'
         `, groupId, startDate.toISOString(), endDate.toISOString());
 
-        const kickedUsers = await dbInstance.get(`
+        const kickedUsersOld = await dbInstance.get(`
             SELECT COUNT(DISTINCT userId) as count 
             FROM audit_log 
             WHERE chatId = ? AND timestamp BETWEEN ? AND ? 
             AND JSON_EXTRACT(logData, '$.action') = 'kicked'
         `, groupId, startDate.toISOString(), endDate.toISOString());
 
-        const bannedUsers = await dbInstance.get(`
+        const bannedUsersOld = await dbInstance.get(`
             SELECT COUNT(DISTINCT userId) as count 
             FROM audit_log 
             WHERE chatId = ? AND timestamp BETWEEN ? AND ? 
             AND JSON_EXTRACT(logData, '$.action') = 'banned'
         `, groupId, startDate.toISOString(), endDate.toISOString());
 
-        // Get average spam score
-        const spamScores = await dbInstance.all(`
+        const totalMuted = (mutedUsersNew?.count || 0) + (mutedUsersOld?.count || 0);
+        const totalKicked = (kickedUsersNew?.count || 0) + (kickedUsersOld?.count || 0);
+        const totalBanned = (bannedUsersNew?.count || 0) + (bannedUsersOld?.count || 0);
+
+        // Get average spam score from flagged messages (both formats)
+        const newSpamScores = await dbInstance.all(`
             SELECT JSON_EXTRACT(logData, '$.spamScore') as score 
             FROM audit_log 
             WHERE chatId = ? AND timestamp BETWEEN ? AND ? 
+            AND JSON_EXTRACT(logData, '$.type') = 'VIOLATION'
             AND JSON_EXTRACT(logData, '$.spamScore') IS NOT NULL
         `, groupId, startDate.toISOString(), endDate.toISOString());
 
-        const avgSpamScore = spamScores.length > 0 
-            ? spamScores.reduce((sum, row) => sum + parseFloat(row.score || 0), 0) / spamScores.length 
-            : 0;
-
-        // Get top violation types
-        const violationTypes = await dbInstance.all(`
-            SELECT JSON_EXTRACT(logData, '$.violationType') as type, COUNT(*) as count 
+        const oldSpamScores = await dbInstance.all(`
+            SELECT JSON_EXTRACT(logData, '$.classificationScore') as score 
             FROM audit_log 
             WHERE chatId = ? AND timestamp BETWEEN ? AND ? 
-            AND JSON_EXTRACT(logData, '$.violationType') IS NOT NULL 
-            GROUP BY JSON_EXTRACT(logData, '$.violationType') 
-            ORDER BY count DESC 
-            LIMIT 5
+            AND JSON_EXTRACT(logData, '$.type') = 'AUTO'
+            AND JSON_EXTRACT(logData, '$.classificationScore') IS NOT NULL
         `, groupId, startDate.toISOString(), endDate.toISOString());
 
+        const allSpamScores = [
+            ...newSpamScores.map(row => parseFloat(row.score || 0)),
+            ...oldSpamScores.map(row => parseFloat(row.score || 0))
+        ].filter(score => score > 0);
+
+        const avgSpamScore = allSpamScores.length > 0 
+            ? allSpamScores.reduce((sum, score) => sum + score, 0) / allSpamScores.length 
+            : 0;
+
+        // Get top violation types (both formats)
+        const newViolationTypes = await dbInstance.all(`
+            SELECT 
+                JSON_EXTRACT(logData, '$.violationType') as type, 
+                COUNT(*) as count 
+            FROM audit_log 
+            WHERE chatId = ? AND timestamp BETWEEN ? AND ? 
+            AND JSON_EXTRACT(logData, '$.type') = 'VIOLATION'
+            AND JSON_EXTRACT(logData, '$.violationType') IS NOT NULL
+            GROUP BY type
+        `, groupId, startDate.toISOString(), endDate.toISOString());
+
+        const oldViolationTypes = await dbInstance.all(`
+            SELECT 
+                CASE 
+                    WHEN JSON_EXTRACT(logData, '$.violationType') IS NOT NULL THEN JSON_EXTRACT(logData, '$.violationType')
+                    WHEN JSON_EXTRACT(logData, '$.classificationScore') > 0.5 THEN 'SPAM'
+                    ELSE 'UNKNOWN'
+                END as type, 
+                COUNT(*) as count 
+            FROM audit_log 
+            WHERE chatId = ? AND timestamp BETWEEN ? AND ? 
+            AND JSON_EXTRACT(logData, '$.type') = 'AUTO'
+            AND JSON_EXTRACT(logData, '$.classificationScore') IS NOT NULL
+            GROUP BY type
+        `, groupId, startDate.toISOString(), endDate.toISOString());
+
+        // Combine and deduplicate violation types
+        const violationTypeMap = new Map();
+        [...newViolationTypes, ...oldViolationTypes].forEach(row => {
+            const type = row.type;
+            const count = violationTypeMap.get(type) || 0;
+            violationTypeMap.set(type, count + (row.count || 0));
+        });
+
+        const topViolationTypes = Array.from(violationTypeMap.entries())
+            .map(([type, count]) => ({ type, count }))
+            .sort((a, b) => b.count - a.count)
+            .slice(0, 5);
+
         const result = {
-            totalMessages: totalMessages?.count || 0,
-            flaggedMessages: flaggedMessages?.count || 0,
-            deletedMessages: deletedMessages?.count || 0,
-            mutedUsers: mutedUsers?.count || 0,
-            kickedUsers: kickedUsers?.count || 0,
-            bannedUsers: bannedUsers?.count || 0,
+            totalMessages: totalScannedCount,
+            flaggedMessages: {
+                total: spamCount + profanityCount,
+                spam: spamCount,
+                profanity: profanityCount
+            },
+            deletedMessages: totalDeleted,
+            mutedUsers: totalMuted,
+            kickedUsers: totalKicked,
+            bannedUsers: totalBanned,
             averageSpamScore: Math.round(avgSpamScore * 100) / 100,
-            topViolationTypes: violationTypes.map(row => ({
-                type: row.type,
-                count: row.count
-            }))
+            topViolationTypes,
+            // Additional metrics
+            flaggedRate: totalScannedCount > 0 ? 
+                Math.round((spamCount + profanityCount) / totalScannedCount * 10000) / 100 : 0,
+            autoModerationEfficiency: {
+                messagesScanned: totalScannedCount,
+                violationsDetected: spamCount + profanityCount,
+                usersActioned: totalMuted + totalKicked + totalBanned
+            }
         };
         
-        console.log(`Debug: Stats result for group ${groupId}:`, result);
         return result;
     } catch (error) {
         logger.error('Error getting group stats:', error);
@@ -512,18 +622,317 @@ export const getTopGroupsByDeletions = async (limit = 5) => {
             SELECT 
                 g.chatId,
                 g.chatTitle,
-                COUNT(al.id) as deletions
+                COUNT(CASE WHEN JSON_EXTRACT(al.logData, '$.action') = 'message_deleted' THEN 1 END) as deletions_new,
+                COUNT(CASE WHEN JSON_EXTRACT(al.logData, '$.type') = 'AUTO' AND JSON_EXTRACT(al.logData, '$.action') = 'deleted' THEN 1 END) as deletions_old
             FROM groups g
-            LEFT JOIN audit_log al ON g.chatId = al.chatId 
-                AND al.logData LIKE '%AUTO%'
+            LEFT JOIN audit_log al ON g.chatId = al.chatId
             GROUP BY g.chatId, g.chatTitle
-            ORDER BY deletions DESC
+            ORDER BY (deletions_new + deletions_old) DESC
             LIMIT ?
         `, limit);
         
-        return result || [];
+        return result.map(row => ({
+            chatId: row.chatId,
+            chatTitle: row.chatTitle,
+            deletions: row.deletions_new + row.deletions_old
+        })) || [];
     } catch (error) {
         logger.error('Error getting top groups by deletions:', error);
+        throw error;
+    }
+};
+
+/**
+ * Get user activity stats for a specific group
+ */
+export const getUserActivityStats = async (groupId, startDate, endDate, limit = 10) => {
+    try {
+        const result = await db.all(`
+            SELECT 
+                u.userId,
+                u.username,
+                u.firstName,
+                u.lastName,
+                COUNT(CASE WHEN JSON_EXTRACT(al.logData, '$.type') = 'SCANNED' THEN 1 END) as messages_sent,
+                COUNT(CASE WHEN JSON_EXTRACT(al.logData, '$.type') = 'VIOLATION' THEN 1 END) as violations,
+                COUNT(CASE WHEN JSON_EXTRACT(al.logData, '$.type') = 'PENALTY' THEN 1 END) as penalties,
+                AVG(CASE 
+                    WHEN JSON_EXTRACT(al.logData, '$.spamScore') IS NOT NULL 
+                    THEN CAST(JSON_EXTRACT(al.logData, '$.spamScore') AS REAL)
+                    WHEN JSON_EXTRACT(al.logData, '$.classificationScore') IS NOT NULL 
+                    THEN CAST(JSON_EXTRACT(al.logData, '$.classificationScore') AS REAL)
+                END) as avg_spam_score
+            FROM users u
+            JOIN audit_log al ON u.userId = al.userId
+            WHERE al.chatId = ? AND al.timestamp BETWEEN ? AND ?
+            GROUP BY u.userId, u.username, u.firstName, u.lastName
+            ORDER BY violations DESC, penalties DESC
+            LIMIT ?
+        `, groupId, startDate.toISOString(), endDate.toISOString(), limit);
+        
+        return result || [];
+    } catch (error) {
+        logger.error('Error getting user activity stats:', error);
+        throw error;
+    }
+};
+
+/**
+ * Get time-based activity patterns for a group
+ */
+export const getActivityPatterns = async (groupId, startDate, endDate) => {
+    try {
+        // Get hourly distribution
+        const hourlyActivity = await db.all(`
+            SELECT 
+                strftime('%H', timestamp) as hour,
+                COUNT(CASE WHEN JSON_EXTRACT(logData, '$.type') = 'SCANNED' THEN 1 END) as messages,
+                COUNT(CASE WHEN JSON_EXTRACT(logData, '$.type') = 'VIOLATION' THEN 1 END) as violations
+            FROM audit_log
+            WHERE chatId = ? AND timestamp BETWEEN ? AND ?
+            GROUP BY hour
+            ORDER BY hour
+        `, groupId, startDate.toISOString(), endDate.toISOString());
+
+        // Get daily distribution
+        const dailyActivity = await db.all(`
+            SELECT 
+                date(timestamp) as date,
+                COUNT(CASE WHEN JSON_EXTRACT(logData, '$.type') = 'SCANNED' THEN 1 END) as messages,
+                COUNT(CASE WHEN JSON_EXTRACT(logData, '$.type') = 'VIOLATION' THEN 1 END) as violations
+            FROM audit_log
+            WHERE chatId = ? AND timestamp BETWEEN ? AND ?
+            GROUP BY date
+            ORDER BY date
+        `, groupId, startDate.toISOString(), endDate.toISOString());
+
+        return {
+            hourlyDistribution: hourlyActivity,
+            dailyActivity: dailyActivity
+        };
+    } catch (error) {
+        logger.error('Error getting activity patterns:', error);
+        throw error;
+    }
+};
+
+/**
+ * Get comprehensive moderation effectiveness metrics
+ */
+export const getModerationEffectiveness = async (groupId, startDate, endDate) => {
+    try {
+        // Get response time metrics (time between violation and penalty)
+        const responseTimeStats = await db.all(`
+            SELECT 
+                v.timestamp as violation_time,
+                p.timestamp as penalty_time,
+                (julianday(p.timestamp) - julianday(v.timestamp)) * 86400 as response_time_seconds,
+                JSON_EXTRACT(v.logData, '$.violationType') as violation_type,
+                JSON_EXTRACT(p.logData, '$.action') as penalty_action
+            FROM audit_log v
+            JOIN audit_log p ON v.userId = p.userId AND v.chatId = p.chatId
+            WHERE v.chatId = ? 
+            AND v.timestamp BETWEEN ? AND ?
+            AND JSON_EXTRACT(v.logData, '$.type') = 'VIOLATION'
+            AND JSON_EXTRACT(p.logData, '$.type') = 'PENALTY'
+            AND p.timestamp > v.timestamp
+            AND (julianday(p.timestamp) - julianday(v.timestamp)) * 86400 < 300  -- Within 5 minutes
+        `, groupId, startDate.toISOString(), endDate.toISOString());
+
+        // Get repeat offender statistics
+        const repeatOffenders = await db.all(`
+            SELECT 
+                userId,
+                COUNT(*) as total_violations,
+                COUNT(DISTINCT date(timestamp)) as active_days,
+                AVG(CASE 
+                    WHEN JSON_EXTRACT(logData, '$.spamScore') IS NOT NULL 
+                    THEN CAST(JSON_EXTRACT(logData, '$.spamScore') AS REAL)
+                    WHEN JSON_EXTRACT(logData, '$.classificationScore') IS NOT NULL 
+                    THEN CAST(JSON_EXTRACT(logData, '$.classificationScore') AS REAL)
+                END) as avg_violation_score
+            FROM audit_log
+            WHERE chatId = ? AND timestamp BETWEEN ? AND ?
+            AND JSON_EXTRACT(logData, '$.type') = 'VIOLATION'
+            GROUP BY userId
+            HAVING total_violations > 1
+            ORDER BY total_violations DESC
+        `, groupId, startDate.toISOString(), endDate.toISOString());
+
+        const avgResponseTime = responseTimeStats.length > 0 
+            ? responseTimeStats.reduce((sum, row) => sum + row.response_time_seconds, 0) / responseTimeStats.length 
+            : 0;
+
+        return {
+            averageResponseTimeSeconds: Math.round(avgResponseTime * 100) / 100,
+            responseTimeDistribution: responseTimeStats,
+            repeatOffenders: repeatOffenders.slice(0, 10), // Top 10
+            totalRepeatOffenders: repeatOffenders.length,
+            effectivenessScore: responseTimeStats.length > 0 ? Math.max(0, 100 - (avgResponseTime / 60) * 10) : 0 // Score based on response time
+        };
+    } catch (error) {
+        logger.error('Error getting moderation effectiveness:', error);
+        throw error;
+    }
+};
+
+/**
+ * Get paginated audit log entries for a group
+ */
+export const getAuditLogPaginated = async (groupId, options = {}) => {
+    const dbInstance = getDb();
+    const { limit = 50, offset = 0, type, userId } = options;
+    
+    try {
+        // Build WHERE clauses
+        let whereClause = 'WHERE chatId = ?';
+        const params = [groupId];
+        
+        if (type) {
+            whereClause += ' AND JSON_EXTRACT(logData, \'$.type\') = ?';
+            params.push(type);
+        }
+        
+        if (userId) {
+            whereClause += ' AND userId = ?';
+            params.push(userId);
+        }
+        
+        // Get total count
+        const totalResult = await dbInstance.get(`
+            SELECT COUNT(*) as total 
+            FROM audit_log 
+            ${whereClause}
+        `, ...params);
+        
+        const total = totalResult?.total || 0;
+        
+        // Get paginated entries
+        const entries = await dbInstance.all(`
+            SELECT 
+                id,
+                timestamp,
+                userId,
+                chatId,
+                logData
+            FROM audit_log 
+            ${whereClause}
+            ORDER BY timestamp DESC 
+            LIMIT ? OFFSET ?
+        `, ...params, limit, offset);
+        
+        // Parse logData for each entry
+        const parsedEntries = entries.map(entry => ({
+            id: entry.id,
+            timestamp: entry.timestamp,
+            userId: entry.userId,
+            chatId: entry.chatId,
+            type: JSON.parse(entry.logData || '{}').type || 'UNKNOWN',
+            action: JSON.parse(entry.logData || '{}').action || null,
+            details: JSON.parse(entry.logData || '{}')
+        }));
+        
+        return {
+            entries: parsedEntries,
+            total: total,
+            hasMore: (offset + limit) < total
+        };
+    } catch (error) {
+        logger.error('Error getting paginated audit log:', error);
+        throw error;
+    }
+};
+
+/**
+ * Export audit log in CSV or JSON format
+ */
+export const exportAuditLog = async (groupId, options = {}) => {
+    const dbInstance = getDb();
+    const { startDate, endDate } = options;
+    
+    try {
+        let whereClause = 'WHERE chatId = ?';
+        const params = [groupId];
+        
+        if (startDate) {
+            whereClause += ' AND timestamp >= ?';
+            params.push(new Date(startDate).toISOString());
+        }
+        
+        if (endDate) {
+            whereClause += ' AND timestamp <= ?';
+            params.push(new Date(endDate).toISOString());
+        }
+        
+        const entries = await dbInstance.all(`
+            SELECT 
+                id,
+                timestamp,
+                userId,
+                chatId,
+                logData
+            FROM audit_log 
+            ${whereClause}
+            ORDER BY timestamp DESC
+        `, ...params);
+        
+        // Parse entries for export
+        const exportEntries = entries.map(entry => {
+            const logData = JSON.parse(entry.logData || '{}');
+            return {
+                id: entry.id,
+                timestamp: entry.timestamp,
+                userId: entry.userId,
+                chatId: entry.chatId,
+                type: logData.type || 'UNKNOWN',
+                action: logData.action || null,
+                violationType: logData.violationType || null,
+                spamScore: logData.spamScore || null,
+                profanityScore: logData.profanityScore || null,
+                reason: logData.reason || null,
+                adminId: logData.adminId || null,
+                amount: logData.amount || null
+            };
+        });
+        
+        // Generate CSV content
+        const csvHeaders = [
+            'ID', 'Timestamp', 'User ID', 'Chat ID', 'Type', 
+            'Action', 'Violation Type', 'Spam Score', 'Profanity Score', 
+            'Reason', 'Admin ID', 'Amount'
+        ];
+        
+        const csvRows = exportEntries.map(entry => [
+            entry.id,
+            entry.timestamp,
+            entry.userId,
+            entry.chatId,
+            entry.type,
+            entry.action || '',
+            entry.violationType || '',
+            entry.spamScore || '',
+            entry.profanityScore || '',
+            entry.reason || '',
+            entry.adminId || '',
+            entry.amount || ''
+        ]);
+        
+        const csvContent = [
+            csvHeaders.join(','),
+            ...csvRows.map(row => row.map(field => 
+                typeof field === 'string' && field.includes(',') 
+                    ? `"${field.replace(/"/g, '""')}"` 
+                    : field
+            ).join(','))
+        ].join('\n');
+        
+        return {
+            entries: exportEntries,
+            csv: csvContent,
+            total: exportEntries.length
+        };
+    } catch (error) {
+        logger.error('Error exporting audit log:', error);
         throw error;
     }
 };

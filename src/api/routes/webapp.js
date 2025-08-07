@@ -260,6 +260,11 @@ router.put('/group/:groupId/settings', verifyTelegramWebApp, webAppController.up
  */
 router.get('/group/:groupId/stats', verifyTelegramWebApp, webAppController.getGroupStats);
 
+// New analytics endpoints
+router.get('/group/:groupId/users', verifyTelegramWebApp, webAppController.getUserActivityStats);
+router.get('/group/:groupId/patterns', verifyTelegramWebApp, webAppController.getActivityPatterns);
+router.get('/group/:groupId/effectiveness', verifyTelegramWebApp, webAppController.getModerationEffectiveness);
+
 /**
  * @swagger
  * /api/v1/webapp/health:
